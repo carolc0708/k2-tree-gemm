@@ -7,6 +7,11 @@
 #include "mmio.h"
 using namespace std;
 
+
+// TODO: get index of the block
+
+// TODO: gather leafs with the same cols
+
 // input block range and k
 // output result of k^2 bit
 std::string getBlockRep(int *csrRowIdx_tmp, int *csrColIdx_tmp, int nnz_mtx_report, int rowmin, int rowmax,
@@ -15,7 +20,8 @@ std::string getBlockRep(int *csrRowIdx_tmp, int *csrColIdx_tmp, int nnz_mtx_repo
     std::cout << "sub_block_len: " << sub_block_len << std::endl; // sub_block_len of the same length means at same level
     //std::cout << "rowmin, rowmax, colmin, colmax: " << rowmin << " " << rowmax << " " << colmin << " " << colmax << std::endl;
 
-    if (sub_block_len <= k) return ""; // supposed to be leave value
+    bool returnflag = false;
+    if (sub_block_len <= k) returnflag = true; // supposed to be leave value
 
     // init block bucket
     unordered_map<string, int> block_bucket;
@@ -71,12 +77,16 @@ std::string getBlockRep(int *csrRowIdx_tmp, int *csrColIdx_tmp, int nnz_mtx_repo
             if (block_bucket[code] == 0) result += "0";
             else {
                 result += "1";
-                result_tmp += getBlockRep(csrRowIdx_tmp, csrColIdx_tmp, nnz_mtx_report, code[0]-'0', (code[0]-'0')+1, code[2]-'0', (code[2]-'0')+1, sub_block_len/k, k);
+                if (!returnflag) result_tmp += getBlockRep(csrRowIdx_tmp, csrColIdx_tmp, nnz_mtx_report, code[0]-'0', (code[0]-'0')+1, code[2]-'0', (code[2]-'0')+1, sub_block_len/k, k);
             }
 
             //std::cout << "code, result: " << code << " " << result << std::endl;
         }
     }
+
+    // leave return
+    if (returnflag) {std::cout << "L: " << result << std::endl; return "";}
+
     //std::cout << "result: " << result << std::endl;
     result = result + result_tmp;
 

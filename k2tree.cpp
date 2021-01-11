@@ -8,20 +8,30 @@
 using namespace std;
 
 
-// TODO: get index of the block
+// given code (block location) and indices range, split the block and output indices
+int *code2ind(std::string code, int k, int rmin_ind, int rmax_ind, int cmin_ind, int cmax_ind) {
+
+    static int result[4];
+    if (code == "0_0") { result[0] = rmin_ind; result[1] = (rmin_ind+rmax_ind)/k; result[2] = cmin_ind; result[3] = (cmin_ind+cmax_ind)/k; }
+    if (code == "0_1") { result[0] = rmin_ind; result[1] = (rmin_ind+rmax_ind)/k; result[2] = ceil(float(cmin_ind+cmax_ind)/k); result[3] = cmax_ind; }
+    if (code == "1_0") { result[0] = ceil(float(rmin_ind+rmax_ind)/k); result[1] = rmax_ind; result[2] = cmin_ind; result[3] = (cmin_ind+cmax_ind)/k; }
+    if (code == "1_1") { result[0] = ceil(float(rmin_ind+rmax_ind)/k); result[1] = rmax_ind; result[2] = ceil(float(cmin_ind+cmax_ind)/k); result[3] = cmax_ind; }
+
+    return result;
+}
 
 // TODO: gather leafs with the same cols
 
 // input block range and k
 // output result of k^2 bit
 std::string getBlockRep(int *csrRowIdx_tmp, int *csrColIdx_tmp, int nnz_mtx_report, int rowmin, int rowmax,
-                        int colmin, int colmax, int sub_block_len, int k) {
+                        int colmin, int colmax, int sub_block_len, int k, int rmin_ind, int rmax_ind, int cmin_ind, int cmax_ind) {
 
     std::cout << "sub_block_len: " << sub_block_len << std::endl; // sub_block_len of the same length means at same level
     //std::cout << "rowmin, rowmax, colmin, colmax: " << rowmin << " " << rowmax << " " << colmin << " " << colmax << std::endl;
 
     bool returnflag = false;
-    if (sub_block_len <= k) returnflag = true; // supposed to be leave value
+    if (sub_block_len == 1) returnflag = true; // supposed to be leaf value
 
     // init block bucket
     unordered_map<string, int> block_bucket;
@@ -57,7 +67,7 @@ std::string getBlockRep(int *csrRowIdx_tmp, int *csrColIdx_tmp, int nnz_mtx_repo
                 code += std::to_string(vrowid-rowmin*k);
                 code += "_";
                 code += std::to_string(vcolid-colmin*k);
-                //std::cout << code << std::endl;
+                //std::cout << code << " " << vrowid << " " << vcolid << std::endl;
                 block_bucket[code] += 1;
             }
         }
@@ -77,15 +87,29 @@ std::string getBlockRep(int *csrRowIdx_tmp, int *csrColIdx_tmp, int nnz_mtx_repo
             if (block_bucket[code] == 0) result += "0";
             else {
                 result += "1";
-                if (!returnflag) result_tmp += getBlockRep(csrRowIdx_tmp, csrColIdx_tmp, nnz_mtx_report, code[0]-'0', (code[0]-'0')+1, code[2]-'0', (code[2]-'0')+1, sub_block_len/k, k);
+
+                //process next level ind: code 00, 01, 10, 11 => ids
+                int *ids = code2ind(code, k, rmin_ind, rmax_ind, cmin_ind, cmax_ind);
+                //std::cout << "next level ids to pass down: " << ids[0] << "," << ids[1] << "," << ids[2] << "," << ids[3] << std::endl;
+                if (!returnflag) result_tmp += getBlockRep(csrRowIdx_tmp, csrColIdx_tmp, nnz_mtx_report, code[0]-'0', (code[0]-'0')+1, code[2]-'0', (code[2]-'0')+1,
+                                                sub_block_len/k, k, ids[0], ids[1], ids[2], ids[3]);
             }
 
             //std::cout << "code, result: " << code << " " << result << std::endl;
         }
     }
 
-    // leave return
-    if (returnflag) {std::cout << "L: " << result << std::endl; return "";}
+    // leaf return
+    if (returnflag) {
+        std::cout << "L: " << result << std::endl;
+        std::string code(1, '0' + rowmin);
+        code += "_";
+        code += ('0' + colmin);
+        //std::cout << code << std::endl;
+        //std::cout << "id pass to this level: "<< rmin_ind << "," << rmax_ind << "," << cmin_ind << "," << cmax_ind << std::endl;
+        int *lids = code2ind(code, k, rmin_ind, rmax_ind, cmin_ind, cmax_ind);
+        std::cout << "Lid: " << lids[0] << "," << lids[1] << "," << lids[2] << "," << lids[3] << std::endl;
+        return ""; }
 
     //std::cout << "result: " << result << std::endl;
     result = result + result_tmp;
@@ -185,7 +209,7 @@ int buildK2Tree(const char *filename, int k) {
 
     // process tree representation -----------------------
     std::string result = "";
-    result += getBlockRep(csrRowIdx_tmp, csrColIdx_tmp, nnz_mtx_report, 0, 0, 0, 0, ceil(m_tmp/k), k);
+    result += getBlockRep(csrRowIdx_tmp, csrColIdx_tmp, nnz_mtx_report, 0, 0, 0, 0, ceil(m_tmp/k), k, 0, m_tmp, 0, m_tmp);
     std::cout << "T result: " << result << std::endl;
 
 //    // print out the matrix (for verifying)

@@ -3,6 +3,7 @@
 #include <unordered_map>
 #include <cmath>
 #include <vector>
+#include <utility>
 
 #include "mmio.h"
 using namespace std;
@@ -21,13 +22,16 @@ int *code2ind(std::string code, int k, int rmin_ind, int rmax_ind, int cmin_ind,
 }
 
 // TODO: gather leafs with the same cols
+// [cmin_cmax] <rmin_rmax, 0010>
+unordered_map<std::string, vector<pair<std::string, std::string>>> leafgroup;
+
 
 // input block range and k
 // output result of k^2 bit
 std::string getBlockRep(int *csrRowIdx_tmp, int *csrColIdx_tmp, int nnz_mtx_report, int rowmin, int rowmax,
                         int colmin, int colmax, int sub_block_len, int k, int rmin_ind, int rmax_ind, int cmin_ind, int cmax_ind) {
 
-    std::cout << "sub_block_len: " << sub_block_len << std::endl; // sub_block_len of the same length means at same level
+    //std::cout << "sub_block_len: " << sub_block_len << std::endl; // sub_block_len of the same length means at same level
     //std::cout << "rowmin, rowmax, colmin, colmax: " << rowmin << " " << rowmax << " " << colmin << " " << colmax << std::endl;
 
     bool returnflag = false;
@@ -101,14 +105,33 @@ std::string getBlockRep(int *csrRowIdx_tmp, int *csrColIdx_tmp, int nnz_mtx_repo
 
     // leaf return
     if (returnflag) {
-        std::cout << "L: " << result << std::endl;
+        //std::cout << "L: " << result << std::endl;
         std::string code(1, '0' + rowmin);
         code += "_";
         code += ('0' + colmin);
         //std::cout << code << std::endl;
         //std::cout << "id pass to this level: "<< rmin_ind << "," << rmax_ind << "," << cmin_ind << "," << cmax_ind << std::endl;
         int *lids = code2ind(code, k, rmin_ind, rmax_ind, cmin_ind, cmax_ind);
-        std::cout << "Lid: " << lids[0] << "," << lids[1] << "," << lids[2] << "," << lids[3] << std::endl;
+        //std::cout << "Lid: " << lids[0] << "," << lids[1] << "," << lids[2] << "," << lids[3] << std::endl;
+
+        //record the result
+        std::string cind = "";
+        cind += std::to_string(lids[2]);
+        cind += "-";
+        cind += std::to_string(lids[3]);
+
+        std::string rind = "";
+        rind += std::to_string(lids[0]);
+        rind += "-";
+        rind += std::to_string(lids[1]);
+
+        pair<std::string, std::string> content;
+        content.first = rind;
+        content.second = result;
+        //std::cout << cind << "," << rind << std::endl;
+
+        leafgroup[cind].push_back(content);
+
         return ""; }
 
     //std::cout << "result: " << result << std::endl;
@@ -236,4 +259,10 @@ int main() {
     char* filename = "matrix/ash85.mtx"; //84x84
     buildK2Tree(filename, 2);
 
+    for (auto it : leafgroup) {
+        std::cout << "[" << it.first << "]" << " ---- " << std::endl;
+        for (auto iv : (it.second)) {
+            std::cout << iv.first << "," << iv.second << std::endl;
+        }
+    }
 }

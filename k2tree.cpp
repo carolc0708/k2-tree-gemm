@@ -21,8 +21,8 @@ int *code2ind(std::string code, int k, int rmin_ind, int rmax_ind, int cmin_ind,
     return result;
 }
 
-// TODO: gather leafs with the same cols
-// [cmin_cmax] <rmin_rmax, 0010>
+// gather leafs with the same rows
+// [rmin-rmax] <cmin_cmax, 0010>
 unordered_map<std::string, vector<pair<std::string, std::string>>> leafgroup;
 
 
@@ -115,22 +115,25 @@ std::string getBlockRep(int *csrRowIdx_tmp, int *csrColIdx_tmp, int nnz_mtx_repo
         //std::cout << "Lid: " << lids[0] << "," << lids[1] << "," << lids[2] << "," << lids[3] << std::endl;
 
         //record the result
-        std::string cind = "";
-        cind += std::to_string(lids[2]);
-        cind += "-";
-        cind += std::to_string(lids[3]);
+        if (result != "0000") { // we care only non-empty leaf block
+            std::string cind = "";
+            cind += std::to_string(lids[2]);
+            cind += "-";
+            cind += std::to_string(lids[3]);
 
-        std::string rind = "";
-        rind += std::to_string(lids[0]);
-        rind += "-";
-        rind += std::to_string(lids[1]);
+            std::string rind = "";
+            rind += std::to_string(lids[0]);
+            rind += "-";
+            rind += std::to_string(lids[1]);
 
-        pair<std::string, std::string> content;
-        content.first = rind;
-        content.second = result;
-        //std::cout << cind << "," << rind << std::endl;
+            pair<std::string, std::string> content;
+            content.first = cind;
+            content.second = result;
+            //std::cout << cind << "," << rind << std::endl;
 
-        leafgroup[cind].push_back(content);
+            leafgroup[rind].push_back(content);
+        }
+
 
         return ""; }
 

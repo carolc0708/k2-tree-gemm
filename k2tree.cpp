@@ -4,9 +4,21 @@
 #include <cmath>
 #include <vector>
 #include <utility>
+#include <bits/stdc++.h> // stringstream
 
 #include "mmio.h"
 using namespace std;
+
+/* TODOs:
+* 1. change the std::string representation of binary code to bitset
+* 2. use class to wrap up k2-tree representation
+* 3. multiply sparse matrix, multiply sparse vector (k2-tree, csr)
+* 4. column-group-wise multiplication
+* 5. rectangular block
+* 6. verify if block size can be generalize to 32,
+*    add some test case for special number
+* 7. k2-tree to .mtx output
+*/
 
 
 // given code (block location) and indices range, split the block and output indices
@@ -53,8 +65,6 @@ std::string getBlockRep(int *csrRowIdx_tmp, int *csrColIdx_tmp, int nnz_mtx_repo
     for (int i=0; i<nnz_mtx_report; i++) {
 
         //std::cout << "(" << csrRowIdx_tmp[i] << "," << csrColIdx_tmp[i] << ")" << std::endl;
-
-
         int vrowid = csrRowIdx_tmp[i]/sub_block_len;
         int vcolid = csrColIdx_tmp[i]/sub_block_len;
 
@@ -116,6 +126,7 @@ std::string getBlockRep(int *csrRowIdx_tmp, int *csrColIdx_tmp, int nnz_mtx_repo
 
         //record the result
         if (result != "0000") { // we care only non-empty leaf block
+
             std::string cind = "";
             cind += std::to_string(lids[2]);
             cind += "-";
@@ -143,7 +154,6 @@ std::string getBlockRep(int *csrRowIdx_tmp, int *csrColIdx_tmp, int nnz_mtx_repo
 
     return result;
 }
-
 
 
 int buildK2Tree(const char *filename, int k) {
@@ -255,6 +265,29 @@ int buildK2Tree(const char *filename, int k) {
     return 0;
 }
 
+// tokenize ids that represent as "XX-XX"
+std::vector<int> tokenizeIDs(std::string id) {
+
+    // Vector of string to save tokens
+    std::vector<int> tokens;
+
+    // stringstream class check1
+    stringstream check1(id);
+
+    std::string intermediate;
+
+    // Tokenizing w.r.t. '-'
+    while(getline(check1, intermediate, '-'))
+    {
+        int val;
+        std::istringstream ss(intermediate);
+        ss >> val;
+        tokens.push_back(val);
+    }
+
+    return tokens;
+}
+
 int main() {
 
     // k2-tree representation
@@ -262,10 +295,113 @@ int main() {
     char* filename = "matrix/ash85.mtx"; //84x84
     buildK2Tree(filename, 2);
 
+    // printout leaf group
     for (auto it : leafgroup) {
         std::cout << "[" << it.first << "]" << " ---- " << std::endl;
         for (auto iv : (it.second)) {
             std::cout << iv.first << "," << iv.second << std::endl;
         }
     }
+
+    // multiply with dense matrix ---
+    // an example dense matrix (assume matrix only contains 0 and 1)
+    std::vector<std::vector<int>> dm;
+    int rows = 84, cols = 84;
+	for(int i = 0; i < rows; i++){
+		std::vector<int> temp;
+		for(int j = 0; j < cols; j++){
+			temp.push_back(1);//(i * cols + j + 1);
+		}
+		dm.push_back(temp);
+	}
+
+	// 1: block-wise multiplication
+	// init output vector
+	std::vector<std::vector<int>> output;
+    for(int i = 0; i < rows; i++){
+        std::vector<int> temp;
+        for(int j = 0; j < cols; j++){
+            temp.push_back(0);
+        }
+        output.push_back(temp);
+    }
+
+    for (auto it : leafgroup) {
+        // split rids
+        std::vector<int> rids  = tokenizeIDs(it.first);
+        //std::cout << rids[0] << " " << rids[1] << std::endl;
+
+        // for each rids
+        if (rids[0] >= rows || rids[1] >= rows) continue;
+        for (int i=rids[0]; i<=rids[1]; i++) { // for each rids
+            for (auto iv : (it.second)) { // for each cids
+               std::vector<int> cids = tokenizeIDs(iv.first);
+               //std::cout << cids[0] << " " << cids[1] << std::endl;
+               std::string content = iv.second;
+               int cnt = 0;
+
+               if (cids[0] >= cols || cids[1] >= cols) continue;
+               for (int j=cids[0]; j<=cids[1]; j++) {
+                    int temp = (content[cnt]-'0');
+                    temp *= dm[j][i];
+                    output[i][j] += temp;
+                    cnt ++;
+               }
+            }
+        }
+    }
+
+    // print the output for debug
+    std::cout << "--- output result: ---" << std::endl;
+    for(int i=0; i<rows; i++) {
+        for(int j=0; j<cols; j++) {
+            std::cout << output[i][j] << " ";
+        }
+        std::cout << std::endl;
+    }
+
+    // multiply with dense vector ---
+    // an example dense vector (assume vector only contains 0 and 1)
+    std::vector<int> dv;
+	for(int i = 0; i < rows; i++){
+		dv.push_back(1);
+	}
+
+    // init output vector
+	std::vector<int> outputv;
+    for(int i = 0; i < rows; i++){
+        outputv.push_back(0);
+    }
+
+    for (auto it : leafgroup) {
+        // split rids
+        std::vector<int> rids  = tokenizeIDs(it.first);
+        //std::cout << rids[0] << " " << rids[1] << std::endl;
+
+        // for each rids
+        if (rids[0] >= rows || rids[1] >= rows) continue;
+        for (int i=rids[0]; i<=rids[1]; i++) { // for each rids
+            for (auto iv : (it.second)) { // for each cids
+               std::vector<int> cids = tokenizeIDs(iv.first);
+               //std::cout << cids[0] << " " << cids[1] << std::endl;
+               std::string content = iv.second;
+               int cnt = 0;
+
+               if (cids[0] >= cols || cids[1] >= cols) continue;
+               for (int j=cids[0]; j<=cids[1]; j++) {
+                    int temp = (content[cnt]-'0');
+                    temp *= dv[j];
+                    outputv[i] += temp;
+                    cnt ++;
+               }
+            }
+        }
+    }
+
+    std::cout << "--- vector output result: ---" << std::endl;
+    for(int i=0; i<rows; i++) {
+        std::cout << outputv[i] << " ";
+    }
+    std::cout << std::endl;
+
 }

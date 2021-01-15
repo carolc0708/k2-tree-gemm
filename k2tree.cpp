@@ -4,7 +4,7 @@
 #include <cmath>
 #include <vector>
 #include <utility>
-#include <bits/stdc++.h> // stringstream
+#include <bits/stdc++.h> // stringstream, bitset
 
 #include "mmio.h"
 using namespace std;
@@ -18,6 +18,7 @@ using namespace std;
 * 6. verify if block size can be generalize to 32,
 *    add some test case for special number
 * 7. k2-tree to .mtx output
+* 8. spMM, spMV on GPU ver.
 */
 
 
@@ -49,7 +50,7 @@ std::string getBlockRep(int *csrRowIdx_tmp, int *csrColIdx_tmp, int nnz_mtx_repo
     bool returnflag = false;
     if (sub_block_len == 1) returnflag = true; // supposed to be leaf value
 
-    // init block bucket
+    // init block bucket // this cannot be generalized to block size > 2
     unordered_map<string, int> block_bucket;
     for (int l=0; l<k; l++){
         for (int r=0; r<k; r++) {
@@ -149,10 +150,9 @@ std::string getBlockRep(int *csrRowIdx_tmp, int *csrColIdx_tmp, int nnz_mtx_repo
         return ""; }
 
     //std::cout << "result: " << result << std::endl;
-    result = result + result_tmp;
 
-
-    return result;
+    if (result == "0000") return "";
+    else return result + " " + result_tmp;
 }
 
 
@@ -272,12 +272,12 @@ std::vector<int> tokenizeIDs(std::string id) {
     std::vector<int> tokens;
 
     // stringstream class check1
-    stringstream check1(id);
+    stringstream check(id);
 
     std::string intermediate;
 
     // Tokenizing w.r.t. '-'
-    while(getline(check1, intermediate, '-'))
+    while(getline(check, intermediate, '-'))
     {
         int val;
         std::istringstream ss(intermediate);

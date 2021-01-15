@@ -9,6 +9,8 @@
 #include "mmio.h"
 using namespace std;
 
+#define BLOCK_LEN 4
+
 /* TODOs:
 * 1. change the std::string representation of binary code to bitset
 * 2. use class to wrap up k2-tree representation
@@ -22,7 +24,7 @@ using namespace std;
 */
 
 
-// given code (block location) and indices range, split the block and output indices
+// given code (block location) and indices range, split the block and output indices //<- code range should be generalized
 int *code2ind(std::string code, int k, int rmin_ind, int rmax_ind, int cmin_ind, int cmax_ind) {
 
     static int result[4];
@@ -36,7 +38,7 @@ int *code2ind(std::string code, int k, int rmin_ind, int rmax_ind, int cmin_ind,
 
 // gather leafs with the same rows
 // [rmin-rmax] <cmin_cmax, 0010>
-unordered_map<std::string, vector<pair<std::string, std::string>>> leafgroup;
+unordered_map<std::string, vector<pair<std::string, bitset<BLOCK_LEN>>>> leafgroup;
 
 
 // input block range and k
@@ -107,12 +109,14 @@ std::string getBlockRep(int *csrRowIdx_tmp, int *csrColIdx_tmp, int nnz_mtx_repo
                 int *ids = code2ind(code, k, rmin_ind, rmax_ind, cmin_ind, cmax_ind);
                 //std::cout << "next level ids to pass down: " << ids[0] << "," << ids[1] << "," << ids[2] << "," << ids[3] << std::endl;
                 if (!returnflag) result_tmp += getBlockRep(csrRowIdx_tmp, csrColIdx_tmp, nnz_mtx_report, code[0]-'0', (code[0]-'0')+1, code[2]-'0', (code[2]-'0')+1,
-                                                sub_block_len/k, k, ids[0], ids[1], ids[2], ids[3]);
+                                                sub_block_len/k, k, ids[0], ids[1], ids[2], ids[3]); //<- should fix this as when blen > 2, code is not single char
             }
-
             //std::cout << "code, result: " << code << " " << result << std::endl;
         }
     }
+
+    // convert result bitstring to bitset
+    bitset<BLOCK_LEN> result_bset(result);
 
     // leaf return
     if (returnflag) {
@@ -126,7 +130,7 @@ std::string getBlockRep(int *csrRowIdx_tmp, int *csrColIdx_tmp, int nnz_mtx_repo
         //std::cout << "Lid: " << lids[0] << "," << lids[1] << "," << lids[2] << "," << lids[3] << std::endl;
 
         //record the result
-        if (result != "0000") { // we care only non-empty leaf block
+        if (result_bset.count() != 0) { // we care only non-empty leaf block
 
             std::string cind = "";
             cind += std::to_string(lids[2]);
@@ -138,20 +142,18 @@ std::string getBlockRep(int *csrRowIdx_tmp, int *csrColIdx_tmp, int nnz_mtx_repo
             rind += "-";
             rind += std::to_string(lids[1]);
 
-            pair<std::string, std::string> content;
+            pair<std::string, bitset<BLOCK_LEN>> content;
             content.first = cind;
-            content.second = result;
+            content.second = result_bset;
             //std::cout << cind << "," << rind << std::endl;
 
             leafgroup[rind].push_back(content);
         }
 
-
         return ""; }
 
-    //std::cout << "result: " << result << std::endl;
-
-    if (result == "0000") return "";
+    // return result
+    if (result_bset.count() == 0) return "";
     else return result + " " + result_tmp;
 }
 
@@ -337,12 +339,12 @@ int main() {
             for (auto iv : (it.second)) { // for each cids
                std::vector<int> cids = tokenizeIDs(iv.first);
                //std::cout << cids[0] << " " << cids[1] << std::endl;
-               std::string content = iv.second;
+               bitset<BLOCK_LEN> block_bset = iv.second;
                int cnt = 0;
 
                if (cids[0] >= cols || cids[1] >= cols) continue;
                for (int j=cids[0]; j<=cids[1]; j++) {
-                    int temp = (content[cnt]-'0');
+                    int temp = block_bset[cnt];
                     temp *= dm[j][i];
                     output[i][j] += temp;
                     cnt ++;
@@ -384,12 +386,12 @@ int main() {
             for (auto iv : (it.second)) { // for each cids
                std::vector<int> cids = tokenizeIDs(iv.first);
                //std::cout << cids[0] << " " << cids[1] << std::endl;
-               std::string content = iv.second;
+               bitset<BLOCK_LEN> block_bset = iv.second;
                int cnt = 0;
 
                if (cids[0] >= cols || cids[1] >= cols) continue;
                for (int j=cids[0]; j<=cids[1]; j++) {
-                    int temp = (content[cnt]-'0');
+                    int temp = block_bset[cnt];
                     temp *= dv[j];
                     outputv[i] += temp;
                     cnt ++;

@@ -10,7 +10,7 @@
 #include <bits/stdc++.h> // stringstream, bitset
 #include "mmio.h"
 
-#define BLOCK_LEN 4
+#define BLOCK_SIZE 64 // k*k, need to be predefined
 using namespace std;
 
 class k2tree
@@ -20,11 +20,11 @@ class k2tree
         int mat_height = 0;
         int mat_width = 0;
         int mat_nnz = 0;
-        int k = k;
+        int k = 0;
 
         // representation result
         std::string T_string;
-        unordered_map<std::string, vector<pair<std::string, bitset<BLOCK_LEN>>>> leafgroup; // [rowidrange] : (colidrange, leaf_bset)
+        unordered_map<std::string, vector<pair<std::string, bitset<BLOCK_SIZE>>>> leafgroup; // [rowidrange] : (colidrange, leaf_bset)
 
     public:
         // ************* constructor and destructor *************
@@ -122,9 +122,10 @@ class k2tree
             this->mat_height = m_tmp;
             this->mat_width = n_tmp;
             this->mat_nnz = nnz_mtx_report;
+            this->k = k;
 
             // process tree representation -----------------------
-            this->T_string = getBlockRep(csrRowIdx_tmp, csrColIdx_tmp, 0, 0, 0, 0, ceil(m_tmp/k), k, 0, m_tmp, 0, m_tmp);
+            this->T_string = getBlockRep(csrRowIdx_tmp, csrColIdx_tmp, 0, 0, 0, 0, ceil(float(m_tmp)/this->k), 0, m_tmp, 0, m_tmp);
 
             // free tmp space
             free(csrColIdx_tmp);
@@ -132,19 +133,20 @@ class k2tree
 
             return 0;
         }
+
         std::string getBlockRep(int *csrRowIdx_tmp, int *csrColIdx_tmp, int rowmin, int rowmax,
-                        int colmin, int colmax, int sub_block_len, int k, int rmin_ind, int rmax_ind, int cmin_ind, int cmax_ind) {
+                        int colmin, int colmax, int sub_block_len, int rmin_ind, int rmax_ind, int cmin_ind, int cmax_ind) {
 
             bool returnflag = false;
-            if (sub_block_len == 1) returnflag = true; // record leaf block result when next-level len is 1
+            if (sub_block_len < this->k) returnflag = true; // record leaf block result when next-level len smaller than k
 
-            // init block bucket // TODO: fix! this cannot be generalized to block size > 2
+            // init block bucket
             unordered_map<string, int> block_bucket;
-            for (int l=0; l<k; l++){
-                for (int r=0; r<k; r++) {
+            for (int l=0; l<this->k; l++){
+                for (int r=0; r<this->k; r++) {
                     std::string code = "";
                     code += std::to_string(l);
-                    code += "_";
+                    code += "-";
                     code += std::to_string(r);
                     block_bucket[code] = 0;
                 }
@@ -158,16 +160,16 @@ class k2tree
                 if (rowmin == rowmax && colmin == colmax) { // first level
                     std::string code = "";
                     code += std::to_string(vrowid);
-                    code += "_";
+                    code += "-";
                     code += std::to_string(vcolid);
                     block_bucket[code] += 1;
 
                 } else { // levels other than first
-                    if ((rowmin*k <= vrowid && vrowid < rowmax*k) && (colmin*k <= vcolid && vcolid < colmax*k)) {
+                    if ((rowmin*this->k <= vrowid && vrowid < rowmax*this->k) && (colmin*this->k <= vcolid && vcolid < colmax*this->k)) {
                         std::string code = "";
-                        code += std::to_string(vrowid-rowmin*k);
-                        code += "_";
-                        code += std::to_string(vcolid-colmin*k);
+                        code += std::to_string(vrowid-rowmin*this->k);
+                        code += "-";
+                        code += std::to_string(vcolid-colmin*this->k);
                         block_bucket[code] += 1;
                     }
                 }
@@ -177,11 +179,11 @@ class k2tree
             std::string result = "";
             std::string result_tmp = "";
 
-            for (int l=0; l<k; l++){
-                for (int r=0; r<k; r++) {
+            for (int l=0; l<this->k; l++){
+                for (int r=0; r<this->k; r++) {
                     std::string code = "";
                     code += std::to_string(l);
-                    code += "_";
+                    code += "-";
                     code += std::to_string(r);
 
                     if (block_bucket[code] == 0) result += "0";
@@ -189,23 +191,25 @@ class k2tree
                         result += "1";
 
                         //process next level ind: code 00, 01, 10, 11 => ids
-                        int *ids = code2ind(code, k, rmin_ind, rmax_ind, cmin_ind, cmax_ind);
-                        if (!returnflag) result_tmp += getBlockRep(csrRowIdx_tmp, csrColIdx_tmp, code[0]-'0', (code[0]-'0')+1, code[2]-'0', (code[2]-'0')+1,
-                                                        sub_block_len/k, k, ids[0], ids[1], ids[2], ids[3]); //TODO: fix! should fix this as when blen > 2, code is not single char
+                        vector<int> ids = code2ind(code, rmin_ind, rmax_ind, cmin_ind, cmax_ind);
+                        vector<int> codeinds = tokenizeIDs(code);
+                        if (!returnflag) result_tmp += getBlockRep(csrRowIdx_tmp, csrColIdx_tmp, codeinds[0], codeinds[0]+1, codeinds[1], codeinds[1]+1,
+                                                        sub_block_len/this->k, ids[0], ids[1], ids[2], ids[3]); //TODO: fix! should fix this as when blen > 2, code is not single char
                     }
                 }
             }
 
             // convert result bitstring to bitset
-            bitset<BLOCK_LEN> result_bset(result);
+            bitset<BLOCK_SIZE> result_bset(result);
 
             // leaf return
             if (returnflag) {
-                std::string code(1, '0' + rowmin);
-                code += "_";
-                code += ('0' + colmin);
+                std::string code = "";
+                code += std::to_string(rowmin);
+                code += "-";
+                code += std::to_string(colmin);
 
-                int *lids = code2ind(code, k, rmin_ind, rmax_ind, cmin_ind, cmax_ind);
+                vector<int> lids = code2ind(code, rmin_ind, rmax_ind, cmin_ind, cmax_ind);
 
                 //record the result
                 if (result_bset.count() != 0) { // we care only non-empty leaf block
@@ -220,7 +224,7 @@ class k2tree
                     rind += "-";
                     rind += std::to_string(lids[1]);
 
-                    pair<std::string, bitset<BLOCK_LEN>> content;
+                    pair<std::string, bitset<BLOCK_SIZE>> content;
                     content.first = cind;
                     content.second = result_bset;
 
@@ -260,7 +264,7 @@ class k2tree
                     for (auto iv : (it.second)) { // for each cids
                        std::vector<int> cids = tokenizeIDs(iv.first);
                        //std::cout << cids[0] << " " << cids[1] << std::endl;
-                       bitset<BLOCK_LEN> block_bset = iv.second;
+                       bitset<BLOCK_SIZE> block_bset = iv.second;
                        int cnt = 0;
 
                        if (cids[0] >= this->mat_width || cids[1] >= this->mat_width) continue;
@@ -304,7 +308,7 @@ class k2tree
                     for (auto iv : (it.second)) { // for each cids
                        std::vector<int> cids = tokenizeIDs(iv.first);
                        //std::cout << cids[0] << " " << cids[1] << std::endl;
-                       bitset<BLOCK_LEN> block_bset = iv.second;
+                       bitset<BLOCK_SIZE> block_bset = iv.second;
                        int cnt = 0;
 
                        if (cids[0] >= this->mat_width || cids[1] >= this->mat_width) continue;
@@ -353,16 +357,29 @@ class k2tree
         }
 
         // given code (block location) and indices range, split the block and output indices //TODO: Fix! <- code range should be generalized
-        int *code2ind(std::string code, int k, int rmin_ind, int rmax_ind, int cmin_ind, int cmax_ind) {
+        vector<int> code2ind(std::string code, int rmin_ind, int rmax_ind, int cmin_ind, int cmax_ind) {
+            vector<int> result{0, 0, 0, 0};
 
-            static int result[4];
-            if (code == "0_0") { result[0] = rmin_ind; result[1] = (rmin_ind+rmax_ind)/k; result[2] = cmin_ind; result[3] = (cmin_ind+cmax_ind)/k; }
-            if (code == "0_1") { result[0] = rmin_ind; result[1] = (rmin_ind+rmax_ind)/k; result[2] = ceil(float(cmin_ind+cmax_ind)/k); result[3] = cmax_ind; }
-            if (code == "1_0") { result[0] = ceil(float(rmin_ind+rmax_ind)/k); result[1] = rmax_ind; result[2] = cmin_ind; result[3] = (cmin_ind+cmax_ind)/k; }
-            if (code == "1_1") { result[0] = ceil(float(rmin_ind+rmax_ind)/k); result[1] = rmax_ind; result[2] = ceil(float(cmin_ind+cmax_ind)/k); result[3] = cmax_ind; }
+            vector<int> codeid = tokenizeIDs(code);
+            int r = codeid[0], c = codeid[1];
+            int r_interval = floor(float(rmax_ind - rmin_ind)/this->k), c_interval = floor(float(cmax_ind - cmin_ind)/this->k);
 
+            result[0] = (rmin_ind + r_interval * r);
+            result[1] = (rmin_ind + r_interval * (r+1));
+            result[2] = (cmin_ind + c_interval * c);
+            result[3] = (cmin_ind + c_interval * (c+1));
             return result;
         }
+//        vector<int> code2ind(std::string code, int rmin_ind, int rmax_ind, int cmin_ind, int cmax_ind) {
+//            int k = this->k;
+//            vector<int> result{0, 0, 0, 0};
+//            if (code == "0-0") { result[0] = rmin_ind; result[1] = (rmin_ind+rmax_ind)/k; result[2] = cmin_ind; result[3] = (cmin_ind+cmax_ind)/k; }
+//            if (code == "0-1") { result[0] = rmin_ind; result[1] = (rmin_ind+rmax_ind)/k; result[2] = ceil(float(cmin_ind+cmax_ind)/k); result[3] = cmax_ind; }
+//            if (code == "1-0") { result[0] = ceil(float(rmin_ind+rmax_ind)/k); result[1] = rmax_ind; result[2] = cmin_ind; result[3] = (cmin_ind+cmax_ind)/k; }
+//            if (code == "1-1") { result[0] = ceil(float(rmin_ind+rmax_ind)/k); result[1] = rmax_ind; result[2] = ceil(float(cmin_ind+cmax_ind)/k); result[3] = cmax_ind; }
+//
+//            return result;
+//        }
 
 };
 

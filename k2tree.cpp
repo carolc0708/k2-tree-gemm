@@ -5,7 +5,7 @@ int main() {
     // k2-tree representation
     //char* filename = "matrix/road_usa.mtx";
     char* filename = "matrix/ash85.mtx"; //84x84
-    k2tree *tree = new k2tree(filename, 2);
+    k2tree *tree = new k2tree(filename, 8);
 
     // printout leaf group
     for (auto it : tree->leafgroup) {

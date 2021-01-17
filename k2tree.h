@@ -119,13 +119,14 @@ class k2tree
             }
 
             // k2-tree metadata
+
             this->mat_height = m_tmp;
             this->mat_width = n_tmp;
             this->mat_nnz = nnz_mtx_report;
             this->k = k;
 
             // process tree representation -----------------------
-            this->T_string = getBlockRep(csrRowIdx_tmp, csrColIdx_tmp, 0, 0, 0, 0, ceil(float(m_tmp)/this->k), 0, m_tmp, 0, m_tmp);
+            this->T_string = getBlockRep(csrRowIdx_tmp, csrColIdx_tmp, 0, 0, 0, 0, ceil(float(this->mat_height)/this->k), 0, this->mat_height, 0, this->mat_height);
 
             // free tmp space
             free(csrColIdx_tmp);
@@ -194,10 +195,12 @@ class k2tree
                         vector<int> ids = code2ind(code, rmin_ind, rmax_ind, cmin_ind, cmax_ind);
                         vector<int> codeinds = tokenizeIDs(code);
                         if (!returnflag) result_tmp += getBlockRep(csrRowIdx_tmp, csrColIdx_tmp, codeinds[0], codeinds[0]+1, codeinds[1], codeinds[1]+1,
-                                                        sub_block_len/this->k, ids[0], ids[1], ids[2], ids[3]);
+                                                        ceil(float(sub_block_len)/this->k), ids[0], ids[1], ids[2], ids[3]);
                     }
                 }
             }
+
+
 
             // convert result bitstring to bitset
             bitset<BLOCK_SIZE> result_bset(result);
@@ -209,6 +212,10 @@ class k2tree
                 code += "-";
                 code += std::to_string(colmin);
 
+                //                std::cout << rowmin << ", " << rowmax << ", " << colmin << ", " << colmax << ", " << sub_block_len
+                //                << ", " << rmin_ind << ", " << rmax_ind << ", " << cmin_ind << ", " << cmax_ind << ", "<< result << std::endl;
+
+                // the last level split
                 vector<int> lids = code2ind(code, rmin_ind, rmax_ind, cmin_ind, cmax_ind);
 
                 //record the result
@@ -393,7 +400,7 @@ class k2tree
 
             vector<int> codeid = tokenizeIDs(code);
             int r = codeid[0], c = codeid[1];
-            int r_interval = floor(float(rmax_ind - rmin_ind)/this->k), c_interval = floor(float(cmax_ind - cmin_ind)/this->k);
+            int r_interval = ceil(float(rmax_ind - rmin_ind)/this->k), c_interval = ceil(float(cmax_ind - cmin_ind)/this->k);
 
             result[0] = (rmin_ind + r_interval * r);
             result[1] = (rmin_ind + r_interval * (r+1));

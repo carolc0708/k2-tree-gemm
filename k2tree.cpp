@@ -4,7 +4,7 @@ int main() {
 
     // k2-tree representation
     //char* filename = "matrix/road_usa.mtx";
-    char* filename = "matrix/ash85.mtx"; //84x84
+    char* filename = "matrix/ash85.mtx"; //85x85
     k2tree *tree = new k2tree(filename, 2);
 
     // printout leaf group
@@ -18,7 +18,7 @@ int main() {
     // multiply with dense matrix ---
     // an example dense matrix (assume matrix only contains 0 and 1)
     std::vector<std::vector<int>> dm;
-    int rows = 84, cols = 84;
+    int rows = 85, cols = 85;
 	for(int i = 0; i < rows; i++){
 		std::vector<int> temp;
 		for(int j = 0; j < cols; j++){

@@ -10,7 +10,7 @@
 #include <bits/stdc++.h> // stringstream, bitset
 #include "mmio.h"
 
-#define BLOCK_SIZE 64 // k*k, need to be predefined
+#define BLOCK_SIZE 4 // k*k, need to be predefined
 using namespace std;
 
 class k2tree
@@ -24,7 +24,7 @@ class k2tree
 
         // representation result
         std::string T_string;
-        unordered_map<std::string, vector<pair<std::string, bitset<BLOCK_SIZE>>>> leafgroup; // [rowidrange] : (colidrange, leaf_bset)
+        unordered_map<std::string, unordered_map<std::string, bitset<BLOCK_SIZE>>> leafgroup; // [rowidrange] : ([colidrange]: leaf_bset)
 
     public:
         // ************* constructor and destructor *************
@@ -194,7 +194,7 @@ class k2tree
                         vector<int> ids = code2ind(code, rmin_ind, rmax_ind, cmin_ind, cmax_ind);
                         vector<int> codeinds = tokenizeIDs(code);
                         if (!returnflag) result_tmp += getBlockRep(csrRowIdx_tmp, csrColIdx_tmp, codeinds[0], codeinds[0]+1, codeinds[1], codeinds[1]+1,
-                                                        sub_block_len/this->k, ids[0], ids[1], ids[2], ids[3]); //TODO: fix! should fix this as when blen > 2, code is not single char
+                                                        sub_block_len/this->k, ids[0], ids[1], ids[2], ids[3]);
                     }
                 }
             }
@@ -224,11 +224,7 @@ class k2tree
                     rind += "-";
                     rind += std::to_string(lids[1]);
 
-                    pair<std::string, bitset<BLOCK_SIZE>> content;
-                    content.first = cind;
-                    content.second = result_bset;
-
-                    this->leafgroup[rind].push_back(content);
+                    this->leafgroup[rind][cind] = result_bset;
                 }
 
                 return ""; }
@@ -331,6 +327,41 @@ class k2tree
 
         }
 
+        void spgemm(k2tree* tree) { // with k2-tree
+            // result storage: store back to original tree
+
+            // multiply tree
+            for (auto it : this->leafgroup) {
+                // split rids
+                std::vector<int> rids = tokenizeIDs(it.first);
+
+                // for each rids
+                if (rids[0] >= this->mat_height || rids[1] >= this->mat_height) continue;
+                for (int i=rids[0]; i<=rids[1]; i++) { // for each rids
+                    for (auto iv : (it.second)) { // for each cids
+                       std::vector<int> cids = tokenizeIDs(iv.first);
+                       bitset<BLOCK_SIZE> block_bset = iv.second;
+                       int cnt = 0;
+
+                       if (cids[0] >= this->mat_width || cids[1] >= this->mat_width) continue;
+                       for (int j=cids[0]; j<=cids[1]; j++) {
+
+                            /* bmm here */
+                            if (tree->leafblockexist(it.first, iv.first)) {
+                                // TODO: suppose to be bmm operation. Just to simulate it now.
+                                /* (iv.second) = bmm();*/
+                                (iv.second) ^= tree->leafgroup[it.first][iv.first];
+                            }
+                            else {(iv.second).reset();}
+                       }
+                    }
+                }
+            }
+
+            // print out result for debug
+            std::cout << "(temp) finish tree * tree !" << std::endl;
+        }
+
 
         // ************* utility functions *************
         // tokenize ids that represent as "XX-XX"
@@ -356,7 +387,7 @@ class k2tree
             return tokens;
         }
 
-        // given code (block location) and indices range, split the block and output indices //TODO: Fix! <- code range should be generalized
+        // given code (block location) and indices range, split the block and output indices
         vector<int> code2ind(std::string code, int rmin_ind, int rmax_ind, int cmin_ind, int cmax_ind) {
             vector<int> result{0, 0, 0, 0};
 
@@ -380,6 +411,12 @@ class k2tree
 //
 //            return result;
 //        }
+
+        bool leafblockexist(std::string rids, std::string cids) {
+            if (this->leafgroup.find(rids) == this->leafgroup.end()) return false;
+            else if (this->leafgroup[rids].find(cids) == this->leafgroup[rids].end()) return false;
+            return true;
+        }
 
 };
 

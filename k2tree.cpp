@@ -5,7 +5,7 @@ int main() {
     // k2-tree representation
     //char* filename = "matrix/road_usa.mtx";
     char* filename = "matrix/ash85.mtx"; //84x84
-    k2tree *tree = new k2tree(filename, 8);
+    k2tree *tree = new k2tree(filename, 2);
 
     // printout leaf group
     for (auto it : tree->leafgroup) {
@@ -38,8 +38,14 @@ int main() {
 
     tree->spmv(dv);
 
+    // multiply with sparse matrix ---
+    k2tree *tree2 = new k2tree(filename, 2);
+
+    tree->spgemm(tree2);
+
     // release
     delete tree;
+    delete tree2;
 
     return 0;
 }

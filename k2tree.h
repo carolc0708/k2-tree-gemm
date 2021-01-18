@@ -138,7 +138,9 @@ class k2tree
         std::string getBlockRep(int *csrRowIdx_tmp, int *csrColIdx_tmp, int rowmin, int rowmax,
                         int colmin, int colmax, int sub_block_len, int rmin_ind, int rmax_ind, int cmin_ind, int cmax_ind) {
 
+            //std::cout << sub_block_len << std::endl;
             bool returnflag = false;
+            //if (this->k <= sub_block_len && sub_block_len < this->k*this->k) returnflag = true; // for cases that the next-level block become too small
             if (sub_block_len < this->k) returnflag = true; // record leaf block result when next-level len smaller than k
 
             // init block bucket
@@ -207,29 +209,40 @@ class k2tree
 
             // leaf return
             if (returnflag) {
-                std::string code = "";
-                code += std::to_string(rowmin);
-                code += "-";
-                code += std::to_string(colmin);
 
-                //                std::cout << rowmin << ", " << rowmax << ", " << colmin << ", " << colmax << ", " << sub_block_len
-                //                << ", " << rmin_ind << ", " << rmax_ind << ", " << cmin_ind << ", " << cmax_ind << ", "<< result << std::endl;
-
-                // the last level split
-                vector<int> lids = code2ind(code, rmin_ind, rmax_ind, cmin_ind, cmax_ind);
+                //std::cout << rowmin << ", " << rowmax << ", " << colmin << ", " << colmax << ", " << sub_block_len
+                //<< ", " << rmin_ind << ", " << rmax_ind << ", " << cmin_ind << ", " << cmax_ind << ", " << result << std::endl;
 
                 //record the result
                 if (result_bset.count() != 0) { // we care only non-empty leaf block
-
-                    std::string cind = "";
-                    cind += std::to_string(lids[2]);
-                    cind += "-";
-                    cind += std::to_string(lids[3]);
+//                    // the last level split
+//                    std::string code = "";
+//                    code += std::to_string(rowmin);
+//                    code += "-";
+//                    code += std::to_string(colmin);
+//
+//                    vector<int> lids = code2ind(code, rmin_ind, rmax_ind, cmin_ind, cmax_ind);
+//
+//                    std::string cind = "";
+//                    cind += std::to_string(lids[2]);
+//                    cind += "-";
+//                    cind += std::to_string(lids[3]);
+//
+//                    std::string rind = "";
+//                    rind += std::to_string(lids[0]);
+//                    rind += "-";
+//                    rind += std::to_string(lids[1]);
 
                     std::string rind = "";
-                    rind += std::to_string(lids[0]);
+                    rind += std::to_string(rmin_ind);
                     rind += "-";
-                    rind += std::to_string(lids[1]);
+                    rind += std::to_string(rmax_ind);
+
+                    std::string cind = "";
+                    cind += std::to_string(cmin_ind);
+                    cind += "-";
+                    cind += std::to_string(cmax_ind);
+
 
                     this->leafgroup[rind][cind] = result_bset;
                 }
@@ -256,30 +269,26 @@ class k2tree
             }
 
             // multiply dense matrix
-            for (auto it : this->leafgroup) {
-                // split rids
-                std::vector<int> rids = tokenizeIDs(it.first);
-                //std::cout << rids[0] << " " << rids[1] << std::endl;
+//            for (auto it : this->leafgroup) {
+//                std::vector<int> rids = tokenizeIDs(it.first);
+//                for (int r=rids[0]; r<rids[1]; r++) { // for each row
+//                    for(auto iv : (it.second)) { // for each blocks
+//                        std::vector<int> cids = tokenizeIDs(iv.first);
+//                        bitset<BLOCK_SIZE> block_bset = iv.second;
+//                        int cnt = (r-rids[0]) * this->k; // first row starts at 0, second row starts at 2
+//                        for (int c=cids[0]; c<cids[1]; c++) { // for each cids
+//
+//                            int temp = block_bset[BLOCK_SIZE-1-cnt]; std::cout << r << ", " << c << ", " << temp << std::endl;
+//                            temp *= dm[c][c];
+//                            output[r][c] += temp;
+//                            cnt ++;
+//                        }
+//                    }
+//                }
+//            }
 
-                // for each rids
-                if (rids[0] >= this->mat_height || rids[1] >= this->mat_height) continue;
-                for (int i=rids[0]; i<=rids[1]; i++) { // for each rids
-                    for (auto iv : (it.second)) { // for each cids
-                       std::vector<int> cids = tokenizeIDs(iv.first);
-                       //std::cout << cids[0] << " " << cids[1] << std::endl;
-                       bitset<BLOCK_SIZE> block_bset = iv.second;
-                       int cnt = 0;
-
-                       if (cids[0] >= this->mat_width || cids[1] >= this->mat_width) continue;
-                       for (int j=cids[0]; j<=cids[1]; j++) {
-                            int temp = block_bset[cnt];
-                            temp *= dm[j][i];
-                            output[i][j] += temp;
-                            cnt ++;
-                       }
-                    }
-                }
-            }
+            // without particular assumption,
+            // virtually all value locations should be considered
 
             // print the output for debug
             std::cout << "--- spmm output result: ---" << std::endl;
@@ -301,24 +310,17 @@ class k2tree
 
             // multiply dense vector
             for (auto it : this->leafgroup) {
-                // split rids
-                std::vector<int> rids  = tokenizeIDs(it.first);
-                //std::cout << rids[0] << " " << rids[1] << std::endl;
 
-                // for each rids
-                if (rids[0] >= this->mat_height || rids[1] >= this->mat_height) continue;
-                for (int i=rids[0]; i<=rids[1]; i++) { // for each rids
+                std::vector<int> rids  = tokenizeIDs(it.first);
+                for (int r=rids[0]; r<rids[1]; r++) { // for each rids
                     for (auto iv : (it.second)) { // for each cids
                        std::vector<int> cids = tokenizeIDs(iv.first);
-                       //std::cout << cids[0] << " " << cids[1] << std::endl;
                        bitset<BLOCK_SIZE> block_bset = iv.second;
-                       int cnt = 0;
-
-                       if (cids[0] >= this->mat_width || cids[1] >= this->mat_width) continue;
-                       for (int j=cids[0]; j<=cids[1]; j++) {
-                            int temp = block_bset[cnt];
-                            temp *= dv[j];
-                            outputv[i] += temp;
+                       int cnt = (r-rids[0]) * this->k;
+                       for (int c=cids[0]; c<cids[1]; c++) {
+                            int temp = block_bset[BLOCK_SIZE-1-cnt];
+                            temp *= dv[c];
+                            outputv[r] += temp;
                             cnt ++;
                        }
                     }
@@ -408,16 +410,6 @@ class k2tree
             result[3] = (cmin_ind + c_interval * (c+1));
             return result;
         }
-//        vector<int> code2ind(std::string code, int rmin_ind, int rmax_ind, int cmin_ind, int cmax_ind) {
-//            int k = this->k;
-//            vector<int> result{0, 0, 0, 0};
-//            if (code == "0-0") { result[0] = rmin_ind; result[1] = (rmin_ind+rmax_ind)/k; result[2] = cmin_ind; result[3] = (cmin_ind+cmax_ind)/k; }
-//            if (code == "0-1") { result[0] = rmin_ind; result[1] = (rmin_ind+rmax_ind)/k; result[2] = ceil(float(cmin_ind+cmax_ind)/k); result[3] = cmax_ind; }
-//            if (code == "1-0") { result[0] = ceil(float(rmin_ind+rmax_ind)/k); result[1] = rmax_ind; result[2] = cmin_ind; result[3] = (cmin_ind+cmax_ind)/k; }
-//            if (code == "1-1") { result[0] = ceil(float(rmin_ind+rmax_ind)/k); result[1] = rmax_ind; result[2] = ceil(float(cmin_ind+cmax_ind)/k); result[3] = cmax_ind; }
-//
-//            return result;
-//        }
 
         bool leafblockexist(std::string rids, std::string cids) {
             if (this->leafgroup.find(rids) == this->leafgroup.end()) return false;

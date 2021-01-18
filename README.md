@@ -2,6 +2,7 @@
 #### Tree Representation 
 * To compile the program: `g++ -o k2tree k2tree.cpp`
 * Execute: `./k2tree`
+* Note: to change the k value of the tree, the `BLOCK_SIZE` in `k2tree.h` should be adjust to k^2 accordingly
 
 #### GEMM
 * spmm: sparse matrix (k2-tree) * dense matrix (2d vector) = dense matrix (2d vector)

@@ -36,6 +36,8 @@ class k2tree
 
         // ************* tree build up functions *************
         int buildK2Tree(const char *filename, int k) {
+
+            // load matrix -----------------------
             int m_tmp, n_tmp, nnz_tmp;
 
             int ret_code;
@@ -45,7 +47,6 @@ class k2tree
             int nnz_mtx_report;
             int isInteger = 0, isReal = 0, isPattern = 0, isSymmetric_tmp = 0, isComplex = 0;
 
-                // load matrix
             if ((f = fopen(filename, "r")) == NULL)
             {
                 printf("Error loading matrix file.\n");
@@ -80,7 +81,6 @@ class k2tree
             }
 
 
-            // read from matrix -----------------------
             int *csrRowIdx_tmp = (int *)malloc(nnz_mtx_report * sizeof(int));
             int *csrColIdx_tmp = (int *)malloc(nnz_mtx_report * sizeof(int));
 
@@ -118,12 +118,12 @@ class k2tree
                 csrColIdx_tmp[i] = idxj;
             }
 
-            // k2-tree metadata
-
+            // k2-tree metadata -----------------------
             this->mat_height = m_tmp;
             this->mat_width = n_tmp;
             this->mat_nnz = nnz_mtx_report;
             this->k = k;
+            this->getPadding();
 
             // process tree representation -----------------------
             this->T_string = getBlockRep(csrRowIdx_tmp, csrColIdx_tmp, 0, 0, 0, 0, ceil(float(this->mat_height)/this->k), 0, this->mat_height, 0, this->mat_height);
@@ -138,9 +138,10 @@ class k2tree
         std::string getBlockRep(int *csrRowIdx_tmp, int *csrColIdx_tmp, int rowmin, int rowmax,
                         int colmin, int colmax, int sub_block_len, int rmin_ind, int rmax_ind, int cmin_ind, int cmax_ind) {
 
-            //std::cout << sub_block_len << std::endl;
+//            std::cout << rowmin << ", " << rowmax << ", " << colmin << ", " << colmax << ", " << sub_block_len << ", "
+//                                << rmin_ind << ", " << rmax_ind << ", " << cmin_ind << ", " << cmax_ind << std::endl;
+
             bool returnflag = false;
-            //if (this->k <= sub_block_len && sub_block_len < this->k*this->k) returnflag = true; // for cases that the next-level block become too small
             if (sub_block_len < this->k) returnflag = true; // record leaf block result when next-level len smaller than k
 
             // init block bucket
@@ -168,11 +169,11 @@ class k2tree
                     block_bucket[code] += 1;
 
                 } else { // levels other than first
-                    if ((rowmin*this->k <= vrowid && vrowid < rowmax*this->k) && (colmin*this->k <= vcolid && vcolid < colmax*this->k)) {
+                    if ((rmin_ind <= csrRowIdx_tmp[i] && csrRowIdx_tmp[i] < rmax_ind) && (cmin_ind <= csrColIdx_tmp[i] && csrColIdx_tmp[i] < cmax_ind)) {
                         std::string code = "";
-                        code += std::to_string(vrowid-rowmin*this->k);
+                        code += std::to_string((csrRowIdx_tmp[i]-rmin_ind)/sub_block_len);
                         code += "-";
-                        code += std::to_string(vcolid-colmin*this->k);
+                        code += std::to_string((csrColIdx_tmp[i]-cmin_ind)/sub_block_len);
                         block_bucket[code] += 1;
                     }
                 }
@@ -192,47 +193,24 @@ class k2tree
                     if (block_bucket[code] == 0) result += "0";
                     else {
                         result += "1";
-
                         //process next level ind: code 00, 01, 10, 11 => ids
-                        vector<int> ids = code2ind(code, rmin_ind, rmax_ind, cmin_ind, cmax_ind);
-                        vector<int> codeinds = tokenizeIDs(code);
-                        if (!returnflag) result_tmp += getBlockRep(csrRowIdx_tmp, csrColIdx_tmp, codeinds[0], codeinds[0]+1, codeinds[1], codeinds[1]+1,
+                        if (!returnflag) {
+                            vector<int> ids = code2ind(code, rmin_ind, rmax_ind, cmin_ind, cmax_ind);
+                            vector<int> codeinds = tokenizeIDs(code);
+                            result_tmp += getBlockRep(csrRowIdx_tmp, csrColIdx_tmp, codeinds[0], codeinds[0]+1, codeinds[1], codeinds[1]+1,
                                                         ceil(float(sub_block_len)/this->k), ids[0], ids[1], ids[2], ids[3]);
+                        }
                     }
                 }
             }
-
-
 
             // convert result bitstring to bitset
             bitset<BLOCK_SIZE> result_bset(result);
 
             // leaf return
             if (returnflag) {
-
-                //std::cout << rowmin << ", " << rowmax << ", " << colmin << ", " << colmax << ", " << sub_block_len
-                //<< ", " << rmin_ind << ", " << rmax_ind << ", " << cmin_ind << ", " << cmax_ind << ", " << result << std::endl;
-
                 //record the result
                 if (result_bset.count() != 0) { // we care only non-empty leaf block
-//                    // the last level split
-//                    std::string code = "";
-//                    code += std::to_string(rowmin);
-//                    code += "-";
-//                    code += std::to_string(colmin);
-//
-//                    vector<int> lids = code2ind(code, rmin_ind, rmax_ind, cmin_ind, cmax_ind);
-//
-//                    std::string cind = "";
-//                    cind += std::to_string(lids[2]);
-//                    cind += "-";
-//                    cind += std::to_string(lids[3]);
-//
-//                    std::string rind = "";
-//                    rind += std::to_string(lids[0]);
-//                    rind += "-";
-//                    rind += std::to_string(lids[1]);
-
                     std::string rind = "";
                     rind += std::to_string(rmin_ind);
                     rind += "-";
@@ -242,7 +220,6 @@ class k2tree
                     cind += std::to_string(cmin_ind);
                     cind += "-";
                     cind += std::to_string(cmax_ind);
-
 
                     this->leafgroup[rind][cind] = result_bset;
                 }
@@ -292,12 +269,12 @@ class k2tree
 
             // print the output for debug
             std::cout << "--- spmm output result: ---" << std::endl;
-            for(int i=0; i<outrows; i++) {
-                for(int j=0; j<outcols; j++) {
-                    std::cout << output[i][j] << " ";
-                }
-                std::cout << std::endl;
-            }
+//            for(int i=0; i<outrows; i++) {
+//                for(int j=0; j<outcols; j++) {
+//                    std::cout << output[i][j] << " ";
+//                }
+//                std::cout << std::endl;
+//            }
         }
 
         void spmv(std::vector<int> dv) {
@@ -318,7 +295,7 @@ class k2tree
                        bitset<BLOCK_SIZE> block_bset = iv.second;
                        int cnt = (r-rids[0]) * this->k;
                        for (int c=cids[0]; c<cids[1]; c++) {
-                            int temp = block_bset[BLOCK_SIZE-1-cnt];
+                            int temp = block_bset[BLOCK_SIZE-1-cnt]; //std::cout << r << ", " << c << ", " << temp << std::endl;
                             temp *= dv[c];
                             outputv[r] += temp;
                             cnt ++;
@@ -415,6 +392,14 @@ class k2tree
             if (this->leafgroup.find(rids) == this->leafgroup.end()) return false;
             else if (this->leafgroup[rids].find(cids) == this->leafgroup[rids].end()) return false;
             return true;
+        }
+
+        void getPadding() {
+            int mat_len = pow(this->k, ceil(log(this->mat_height)/log(this->k)));
+            this->mat_height = mat_len;
+            this->mat_width = mat_len;
+
+            std::cout << "Add paddings to the matrix, now mat_len = " << mat_len << std::endl;
         }
 
 };

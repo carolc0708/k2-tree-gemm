@@ -4,8 +4,8 @@ int main() {
 
     // k2-tree representation
     //char* filename = "matrix/hollywood-2009.mtx";
-    //char* filename = "matrix/ash85.mtx"; //85x85
-    char *filename = "matrix/test4.mtx"; //4x4
+    char* filename = "matrix/ash85.mtx"; //85x85
+    //char *filename = "matrix/test4.mtx"; //4x4
     k2tree *tree = new k2tree(filename, 2);
 
     // printout leaf group
@@ -16,37 +16,38 @@ int main() {
         }
     }
 
-    // multiply with dense matrix ---
-    // an example dense matrix (assume matrix only contains 0 and 1)
-    std::vector<std::vector<int>> dm;
+//    // multiply with dense matrix ---
+//    // an example dense matrix (assume matrix only contains 0 and 1)
+//    std::vector<std::vector<int>> dm;
     int rows = tree->mat_height, cols = tree->mat_width;
-	for(int i = 0; i < rows; i++){
-		std::vector<int> temp;
-		for(int j = 0; j < cols; j++){
-			temp.push_back(1);//(i * cols + j + 1);
-		}
-		dm.push_back(temp);
-	}
-
-    tree->spmm(dm);
+//	for(int i = 0; i < rows; i++){
+//		std::vector<int> temp;
+//		for(int j = 0; j < cols; j++){
+//			temp.push_back(1);//(i * cols + j + 1);
+//		}
+//		dm.push_back(temp);
+//	}
+//
+//    tree->spmm(dm);
 
     // multiply with dense vector ---
     // an example dense vector (assume vector only contains 0 and 1)
     std::vector<int> dv;
 	for(int i = 0; i < rows; i++){
-		dv.push_back(1);
+	    if (i < 85) dv.push_back(1);
+	    else dv.push_back(0);
 	}
-
+    std::cout << "dv_len: " << rows << std::endl;
     tree->spmv(dv);
 
-    // multiply with sparse matrix ---
-    k2tree *tree2 = new k2tree(filename, 2);
-
-    tree->spgemm(tree2);
+//    // multiply with sparse matrix ---
+//    k2tree *tree2 = new k2tree(filename, 2);
+//
+//    tree->spgemm(tree2);
 
     // release
     delete tree;
-    delete tree2;
+//    delete tree2;
 
     return 0;
 }

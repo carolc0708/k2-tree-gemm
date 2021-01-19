@@ -11,3 +11,6 @@
 * spmv: sparse matrix (k2-tree) * dense vector (1d vector) = dense vector (1d vector)
 * spgemm: sparse matrix (k2-tree) * sparse matrix (k2-tree) = sparse matrix (k2-tree)
 * Note: `spmm()` and `spgemm()` are still under revision
+
+#### Graph Algorithm
+* bfs: `g++ -o bfs bfs.cpp`, then `./bfs`

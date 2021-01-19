@@ -10,7 +10,7 @@
 #include <bits/stdc++.h> // stringstream, bitset
 #include "mmio.h"
 
-#define BLOCK_SIZE 25 // k*k, need to be predefined
+#define BLOCK_SIZE 4 // k*k, need to be predefined
 using namespace std;
 
 class k2tree
@@ -25,7 +25,7 @@ class k2tree
         int* csrRowIdx_tmp;
         int* csrColIdx_tmp;
 
-        vector<int> prime;
+        vector<int> prime; // in hybrid-k mode, record the prime factors of mat_height
 
         // representation result
         std::string T_string;
@@ -36,11 +36,17 @@ class k2tree
         k2tree(const char* filename, int k) {
             buildK2Tree(filename, k);
             std::cout << "T_string: " << T_string << std::endl;
-            std::cout << T_string.length()-1 << std::endl;
         }
         ~k2tree() {} // leave empty for now
 
         // ************* tree build up functions *************
+ /**
+ * Read the matrix from .mtx file and build the k2-tree
+ *
+ * @param filename  The filename (.mtx extension) of the ultra-sparse matrix
+ * @param k  For fixed-k mode, the specified k value; For hybrid-k mode, remains 0
+ * @return   1 or -1 to indicate successfully read in the matrix or not
+ */
         int buildK2Tree(const char *filename, int k) {
 
             // load matrix -----------------------
@@ -128,16 +134,19 @@ class k2tree
             this->mat_height = m_tmp;
             this->mat_width = n_tmp;
             this->mat_nnz = nnz_mtx_report;
-            this->k = k;
 
-            std::cout << "mat_height = " << this->mat_height << std::endl;
-            this->getPrimeFactor(this->mat_height);
-            this->k = this->prime[(this->prime).size()-1];
-
-            //this->getPadding();
 
             // process tree representation -----------------------
-            this->T_string = getBlockRep(0, this->mat_height, 0, this->mat_height, ceil(float(this->mat_height)/this->k), (this->prime).size()-1); //next-level k_ind
+            // choice of k-split
+            if (k > 0) { // fixed-k, get padding
+                this->k = k;
+                this->getPadding();
+                this->T_string = getBlockRep(0, this->mat_height, 0, this->mat_height, ceil(float(this->mat_height)/this->k), -1);
+            } else { // hybrid-k, get prime factors for a sequence of k
+                this->getPrimeFactor(this->mat_height);
+                this->k = this->prime[(this->prime).size()-1];
+                this->T_string = getBlockRep(0, this->mat_height, 0, this->mat_height, ceil(float(this->mat_height)/this->k), (this->prime).size()-1);
+            }
 
             // free tmp space
             free(this->csrRowIdx_tmp);
@@ -146,15 +155,29 @@ class k2tree
             return 0;
         }
 
+ /**
+ * Recursive function to record the binary string of block at each level
+ *
+ * @param rmin_ind, rmax_ind  The row index range of the block to be processed
+ * @param cmin_ind, cmax_ind  The col index range of the block to be processed
+ * @param sub_block_len  The sub-block size to split the block
+ * @param k_ind  For hybrid-k mode, k2tree::prime[k_ind] indicates k value at this level;
+ *               For fixed-k mode, the value remains -1
+ * @return      part of T_string for non-leaf blocks; "" for leaf blocks
+ */
         std::string getBlockRep(int rmin_ind, int rmax_ind, int cmin_ind, int cmax_ind, int sub_block_len, int k_ind) {
 
-
             bool returnflag = false;
-            //if (sub_block_len < this->k) returnflag = true; // record leaf block result when next-level len smaller than k
-            if (k_ind == 0) returnflag = true;
-            int parent_k = this->k; // parent k
-            this->k = this->prime[k_ind];
-            std::cout << "sub block len: " << sub_block_len << ", this level k: " << this->k << std::endl;
+            int parent_k;
+            if (k_ind == -1) { // fixed-k mode
+                if (sub_block_len < this->k) returnflag = true; // record leaf block result when next-level len smaller than k
+            } else { // hybrid-k mode
+                if (k_ind == 0) returnflag = true;
+                parent_k = this->k; // parent k
+                this->k = this->prime[k_ind];
+                //std::cout << "sub block len: " << sub_block_len << ", this level k: " << this->k << std::endl;
+            }
+
 
             // init block bucket
             unordered_map<string, int> block_bucket;
@@ -190,8 +213,10 @@ class k2tree
                         result += "1";
                         if (!returnflag) {
                             vector<int> ids = code2ind(code, rmin_ind, rmax_ind, cmin_ind, cmax_ind);
-                            //result_tmp += getBlockRep(ids[0], ids[1], ids[2], ids[3], ceil(float(sub_block_len)/this->k), k_ind-1);
-                            result_tmp += getBlockRep(ids[0], ids[1], ids[2], ids[3], ceil(float(sub_block_len)/this->prime[k_ind-1]), k_ind-1);
+                            if (k_ind == -1) // fixed-k mode
+                                result_tmp += getBlockRep(ids[0], ids[1], ids[2], ids[3], ceil(float(sub_block_len)/this->k), -1);
+                            else // hybrid-k mode
+                                result_tmp += getBlockRep(ids[0], ids[1], ids[2], ids[3], ceil(float(sub_block_len)/this->prime[k_ind-1]), k_ind-1);
                         }
                     }
                 }
@@ -209,12 +234,12 @@ class k2tree
                     this->leafgroup[rind][cind] = result_bset;
                 }
 
-                this->k = parent_k;
+                if (k_ind != -1) this->k = parent_k; // for hybrid-k mode
                 return "";
             }
 
             // return result
-            this->k = parent_k;
+            if (k_ind != -1) this->k = parent_k; // for hybrid-k mode
             if (result_bset.count() == 0) return "";
             else return result + " " + result_tmp;
         }
@@ -428,7 +453,8 @@ class k2tree
             if (n > 2) prime.push_back(n);
 
             // print out result
-            for (int i=0; i<prime.size(); i++) std::cout << prime[i] << " ";
+            std::cout << "hybrid-k values by level: ";
+            for (int i=0; i<prime.size(); i++) std::cout << prime[prime.size()-1-i] << " ";
             std::cout << std::endl;
 
             this->prime = prime;

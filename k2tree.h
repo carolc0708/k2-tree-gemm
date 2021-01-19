@@ -10,7 +10,7 @@
 #include <bits/stdc++.h> // stringstream, bitset
 #include "mmio.h"
 
-#define BLOCK_SIZE 4 // k*k, need to be predefined
+#define BLOCK_SIZE 25 // k*k, need to be predefined
 using namespace std;
 
 class k2tree
@@ -25,6 +25,8 @@ class k2tree
         int* csrRowIdx_tmp;
         int* csrColIdx_tmp;
 
+        vector<int> prime;
+
         // representation result
         std::string T_string;
         unordered_map<std::string, unordered_map<std::string, bitset<BLOCK_SIZE>>> leafgroup; // [rowidrange] : ([colidrange]: leaf_bset)
@@ -34,6 +36,7 @@ class k2tree
         k2tree(const char* filename, int k) {
             buildK2Tree(filename, k);
             std::cout << "T_string: " << T_string << std::endl;
+            std::cout << T_string.length()-1 << std::endl;
         }
         ~k2tree() {} // leave empty for now
 
@@ -126,10 +129,15 @@ class k2tree
             this->mat_width = n_tmp;
             this->mat_nnz = nnz_mtx_report;
             this->k = k;
-            this->getPadding();
+
+            std::cout << "mat_height = " << this->mat_height << std::endl;
+            this->getPrimeFactor(this->mat_height);
+            this->k = this->prime[(this->prime).size()-1];
+
+            //this->getPadding();
 
             // process tree representation -----------------------
-            this->T_string = getBlockRep(0, this->mat_height, 0, this->mat_height, ceil(float(this->mat_height)/this->k));
+            this->T_string = getBlockRep(0, this->mat_height, 0, this->mat_height, ceil(float(this->mat_height)/this->k), (this->prime).size()-1); //next-level k_ind
 
             // free tmp space
             free(this->csrRowIdx_tmp);
@@ -138,10 +146,15 @@ class k2tree
             return 0;
         }
 
-        std::string getBlockRep(int rmin_ind, int rmax_ind, int cmin_ind, int cmax_ind, int sub_block_len) {
+        std::string getBlockRep(int rmin_ind, int rmax_ind, int cmin_ind, int cmax_ind, int sub_block_len, int k_ind) {
+
 
             bool returnflag = false;
-            if (sub_block_len < this->k) returnflag = true; // record leaf block result when next-level len smaller than k
+            //if (sub_block_len < this->k) returnflag = true; // record leaf block result when next-level len smaller than k
+            if (k_ind == 0) returnflag = true;
+            int parent_k = this->k; // parent k
+            this->k = this->prime[k_ind];
+            std::cout << "sub block len: " << sub_block_len << ", this level k: " << this->k << std::endl;
 
             // init block bucket
             unordered_map<string, int> block_bucket;
@@ -177,7 +190,8 @@ class k2tree
                         result += "1";
                         if (!returnflag) {
                             vector<int> ids = code2ind(code, rmin_ind, rmax_ind, cmin_ind, cmax_ind);
-                            result_tmp += getBlockRep(ids[0], ids[1], ids[2], ids[3], ceil(float(sub_block_len)/this->k));
+                            //result_tmp += getBlockRep(ids[0], ids[1], ids[2], ids[3], ceil(float(sub_block_len)/this->k), k_ind-1);
+                            result_tmp += getBlockRep(ids[0], ids[1], ids[2], ids[3], ceil(float(sub_block_len)/this->prime[k_ind-1]), k_ind-1);
                         }
                     }
                 }
@@ -195,10 +209,12 @@ class k2tree
                     this->leafgroup[rind][cind] = result_bset;
                 }
 
+                this->k = parent_k;
                 return "";
             }
 
             // return result
+            this->k = parent_k;
             if (result_bset.count() == 0) return "";
             else return result + " " + result_tmp;
         }
@@ -265,9 +281,9 @@ class k2tree
                     for (auto iv : (it.second)) { // for each cids
                        std::vector<int> cids = tokenizeIDs(iv.first);
                        bitset<BLOCK_SIZE> block_bset = iv.second;
-                       int cnt = (r-rids[0]) * this->k;
+                       int cnt = (r-rids[0]) * sqrt(BLOCK_SIZE);
                        for (int c=cids[0]; c<cids[1]; c++) {
-                            int temp = block_bset[BLOCK_SIZE-1-cnt]; //std::cout << r << ", " << c << ", " << temp << std::endl;
+                            int temp = block_bset[BLOCK_SIZE-1-cnt];
                             temp *= dv[c];
                             outputv[r] += temp;
                             cnt ++;
@@ -383,6 +399,39 @@ class k2tree
             code += "-";
             code += std::to_string(max);
             return code;
+        }
+
+        // prime factorization for hybrid-k tree
+        void getPrimeFactor(int n) {
+            vector<int> prime;
+            // Print the number of 2s that divide n
+            while (n%2 == 0)
+            {
+                prime.push_back(2);
+                n = n/2;
+            }
+
+            // n must be odd at this point.  So we can skip
+            // one element (Note i = i +2)
+            for (int i = 3; i <= sqrt(n); i = i+2)
+            {
+                // While i divides n, print i and divide n
+                while (n%i == 0)
+                {
+                    prime.push_back(i);
+                    n = n/i;
+                }
+            }
+
+            // This condition is to handle the case when n
+            // is a prime number greater than 2
+            if (n > 2) prime.push_back(n);
+
+            // print out result
+            for (int i=0; i<prime.size(); i++) std::cout << prime[i] << " ";
+            std::cout << std::endl;
+
+            this->prime = prime;
         }
 
 };

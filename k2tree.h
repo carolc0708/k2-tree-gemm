@@ -18,9 +18,12 @@ class k2tree
     public:
         // sparse matrix metadata
         int mat_height = 0;
-        int mat_width = 0;
+        int mat_width = 0; // assume the same as mat_height
         int mat_nnz = 0;
         int k = 0;
+
+        int* csrRowIdx_tmp;
+        int* csrColIdx_tmp;
 
         // representation result
         std::string T_string;
@@ -81,8 +84,8 @@ class k2tree
             }
 
 
-            int *csrRowIdx_tmp = (int *)malloc(nnz_mtx_report * sizeof(int));
-            int *csrColIdx_tmp = (int *)malloc(nnz_mtx_report * sizeof(int));
+            this->csrRowIdx_tmp = (int *)malloc(nnz_mtx_report * sizeof(int));
+            this->csrColIdx_tmp = (int *)malloc(nnz_mtx_report * sizeof(int));
 
             for (int i=0; i<nnz_mtx_report; i++) {
                 int idxi, idxj;
@@ -114,8 +117,8 @@ class k2tree
                 idxj--;
 
                 // store to temporary location
-                csrRowIdx_tmp[i] = idxi;
-                csrColIdx_tmp[i] = idxj;
+                this->csrRowIdx_tmp[i] = idxi;
+                this->csrColIdx_tmp[i] = idxj;
             }
 
             // k2-tree metadata -----------------------
@@ -126,20 +129,16 @@ class k2tree
             this->getPadding();
 
             // process tree representation -----------------------
-            this->T_string = getBlockRep(csrRowIdx_tmp, csrColIdx_tmp, 0, 0, 0, 0, ceil(float(this->mat_height)/this->k), 0, this->mat_height, 0, this->mat_height);
+            this->T_string = getBlockRep(0, this->mat_height, 0, this->mat_height, ceil(float(this->mat_height)/this->k));
 
             // free tmp space
-            free(csrColIdx_tmp);
-            free(csrRowIdx_tmp);
+            free(this->csrRowIdx_tmp);
+            free(this->csrColIdx_tmp);
 
             return 0;
         }
 
-        std::string getBlockRep(int *csrRowIdx_tmp, int *csrColIdx_tmp, int rowmin, int rowmax,
-                        int colmin, int colmax, int sub_block_len, int rmin_ind, int rmax_ind, int cmin_ind, int cmax_ind) {
-
-//            std::cout << rowmin << ", " << rowmax << ", " << colmin << ", " << colmax << ", " << sub_block_len << ", "
-//                                << rmin_ind << ", " << rmax_ind << ", " << cmin_ind << ", " << cmax_ind << std::endl;
+        std::string getBlockRep(int rmin_ind, int rmax_ind, int cmin_ind, int cmax_ind, int sub_block_len) {
 
             bool returnflag = false;
             if (sub_block_len < this->k) returnflag = true; // record leaf block result when next-level len smaller than k
@@ -148,34 +147,20 @@ class k2tree
             unordered_map<string, int> block_bucket;
             for (int l=0; l<this->k; l++){
                 for (int r=0; r<this->k; r++) {
-                    std::string code = "";
-                    code += std::to_string(l);
-                    code += "-";
-                    code += std::to_string(r);
+
+                    std::string code = genRangeCode(l, r);
                     block_bucket[code] = 0;
                 }
             }
 
             // start recording
             for (int i=0; i<this->mat_nnz; i++) {
-                int vrowid = csrRowIdx_tmp[i]/sub_block_len;
-                int vcolid = csrColIdx_tmp[i]/sub_block_len;
+                if ((rmin_ind <= this->csrRowIdx_tmp[i] && this->csrRowIdx_tmp[i] < rmax_ind)
+                && (cmin_ind <= this->csrColIdx_tmp[i] && this->csrColIdx_tmp[i] < cmax_ind)) {
 
-                if (rowmin == rowmax && colmin == colmax) { // first level
-                    std::string code = "";
-                    code += std::to_string(vrowid);
-                    code += "-";
-                    code += std::to_string(vcolid);
+                    std::string code = genRangeCode((this->csrRowIdx_tmp[i]-rmin_ind)/sub_block_len,
+                                                    (this->csrColIdx_tmp[i]-cmin_ind)/sub_block_len);
                     block_bucket[code] += 1;
-
-                } else { // levels other than first
-                    if ((rmin_ind <= csrRowIdx_tmp[i] && csrRowIdx_tmp[i] < rmax_ind) && (cmin_ind <= csrColIdx_tmp[i] && csrColIdx_tmp[i] < cmax_ind)) {
-                        std::string code = "";
-                        code += std::to_string((csrRowIdx_tmp[i]-rmin_ind)/sub_block_len);
-                        code += "-";
-                        code += std::to_string((csrColIdx_tmp[i]-cmin_ind)/sub_block_len);
-                        block_bucket[code] += 1;
-                    }
                 }
             }
 
@@ -185,20 +170,14 @@ class k2tree
 
             for (int l=0; l<this->k; l++){
                 for (int r=0; r<this->k; r++) {
-                    std::string code = "";
-                    code += std::to_string(l);
-                    code += "-";
-                    code += std::to_string(r);
 
+                    std::string code = genRangeCode(l, r);
                     if (block_bucket[code] == 0) result += "0";
                     else {
                         result += "1";
-                        //process next level ind: code 00, 01, 10, 11 => ids
                         if (!returnflag) {
                             vector<int> ids = code2ind(code, rmin_ind, rmax_ind, cmin_ind, cmax_ind);
-                            vector<int> codeinds = tokenizeIDs(code);
-                            result_tmp += getBlockRep(csrRowIdx_tmp, csrColIdx_tmp, codeinds[0], codeinds[0]+1, codeinds[1], codeinds[1]+1,
-                                                        ceil(float(sub_block_len)/this->k), ids[0], ids[1], ids[2], ids[3]);
+                            result_tmp += getBlockRep(ids[0], ids[1], ids[2], ids[3], ceil(float(sub_block_len)/this->k));
                         }
                     }
                 }
@@ -207,24 +186,17 @@ class k2tree
             // convert result bitstring to bitset
             bitset<BLOCK_SIZE> result_bset(result);
 
-            // leaf return
+            // return the leaf block
             if (returnflag) {
-                //record the result
                 if (result_bset.count() != 0) { // we care only non-empty leaf block
-                    std::string rind = "";
-                    rind += std::to_string(rmin_ind);
-                    rind += "-";
-                    rind += std::to_string(rmax_ind);
 
-                    std::string cind = "";
-                    cind += std::to_string(cmin_ind);
-                    cind += "-";
-                    cind += std::to_string(cmax_ind);
-
+                    std::string rind = genRangeCode(rmin_ind, rmax_ind);
+                    std::string cind = genRangeCode(cmin_ind, cmax_ind);
                     this->leafgroup[rind][cind] = result_bset;
                 }
 
-                return ""; }
+                return "";
+            }
 
             // return result
             if (result_bset.count() == 0) return "";
@@ -388,18 +360,29 @@ class k2tree
             return result;
         }
 
+        // check if leaf block at certain index exist
         bool leafblockexist(std::string rids, std::string cids) {
             if (this->leafgroup.find(rids) == this->leafgroup.end()) return false;
             else if (this->leafgroup[rids].find(cids) == this->leafgroup[rids].end()) return false;
             return true;
         }
 
+        // calculate the padding and replace metadata
         void getPadding() {
             int mat_len = pow(this->k, ceil(log(this->mat_height)/log(this->k)));
             this->mat_height = mat_len;
             this->mat_width = mat_len;
 
             std::cout << "Add paddings to the matrix, now mat_len = " << mat_len << std::endl;
+        }
+
+        // generate range code based on given ids
+        std::string genRangeCode(int min, int max) {
+            std::string code = "";
+            code += std::to_string(min);
+            code += "-";
+            code += std::to_string(max);
+            return code;
         }
 
 };

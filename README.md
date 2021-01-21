@@ -9,7 +9,8 @@
 #### GEMM
 * spmv: sparse matrix (k2-tree) * dense vector (1d vector) = dense vector (1d vector)
 * spgemm: sparse matrix (k2-tree) * sparse matrix (k2-tree) = sparse matrix (k2-tree)
-* Note: `spgemm()` result hasn't been verified
+    * `spgemm()` only support multiplication of trees with same k value and same matrix length
+
 
 #### Graph Algorithm
 * bfs: `g++ -o bfs bfs.cpp`, then `./bfs`

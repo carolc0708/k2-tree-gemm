@@ -13,7 +13,7 @@
 #define BLOCK_SIZE 4 // k*k, need to be predefined
 using namespace std;
 
-
+// binary matrix multiplication
 bitset<BLOCK_SIZE> bmm(bitset<BLOCK_SIZE> a, bitset<BLOCK_SIZE> b) {
 
     bitset<BLOCK_SIZE> result;
@@ -33,7 +33,6 @@ bitset<BLOCK_SIZE> bmm(bitset<BLOCK_SIZE> a, bitset<BLOCK_SIZE> b) {
     }
 
     return result;
-
 }
 
 class k2tree
@@ -62,7 +61,6 @@ public:
                 std::cout << "Construct an empty tree. " << std::endl;
             } else {
             buildK2Tree(filename, k);
-            std::cout << "T_string: " << T_string << std::endl;
         }
 
     }
@@ -301,28 +299,27 @@ public:
             }
         }
 
-        std::cout << "--- spmv output result: ---" << std::endl;
+        // print out vector result
         for(int i=0; i<outrows; i++) {
             std::cout << outputv[i] << " ";
         }
         std::cout << std::endl;
+
         return outputv;
     }
 
-    void spgemm(k2tree* B) {
-        // result storage: store to a new tree
-        // (will be handled in detail later)
-
-        // Cik = Sum(A_ij * B_jk)
-        // considering only non-empty leaf blocks
+    k2tree* spgemm(k2tree* B) { // Cik = Sum(A_ij * B_jk), considering only non-empty leaf blocks
+        // warning message
+        if (this->mat_height != B->mat_height) std::cout << "[k2tree::spgemm()] Invalid matrix size for matrix multiplication!" << std::endl;
+        if (this->k != B->k) std::cout << "[k2tree::spgemm()] k value mismatch for matrix multiplication!" << std::endl;
 
         // initialize a new tree
-        k2tree *output = new k2tree("", 2); // construct a empty structure
+        int block_len = sqrt(BLOCK_SIZE);
+        k2tree *output = new k2tree("", block_len); // construct a empty structure
         output->mat_height = this->mat_height;
 
         // multiplication
-        int block_len = sqrt(BLOCK_SIZE);
-        int n = this->mat_height/block_len;
+        int n = this->mat_height;
 
         for (int i=0; i<n; i+=block_len) {
             std::string i_ind = genRangeCode(i, i+block_len);
@@ -336,20 +333,11 @@ public:
                     if (this->leafBlockExist(i_ind, m_ind) && B->leafBlockExist(m_ind, j_ind))
                         value |= bmm(this->leafgroup[i_ind][m_ind], B->leafgroup[m_ind][j_ind]);
                 }
-                output->leafgroup[i_ind][j_ind] = value;
+                if (value.count() != 0) output->leafgroup[i_ind][j_ind] = value;
             }
         }
 
-
-        // printout the output's leaf group
-        std::cout << "output the spmm result leaf group: " << std::endl;
-        for (auto it : output->leafgroup) {
-            std::cout << "[" << it.first << "]" << " ---- " << std::endl;
-            for (auto iv : (it.second)) {
-                if ((iv.second).count() != 0)
-                    std::cout << iv.first << "," << iv.second << std::endl;
-            }
-        }
+        return output;
     }
 
 
@@ -451,6 +439,22 @@ public:
         this->prime = prime;
     }
 
+    // ************* print functions *************
+    void printTree() {
+        std::cout << "*********************************" << std::endl;
+        std::cout << "T_string: " << T_string << std::endl;
+
+        // printout leaf group
+        for (auto it : this->leafgroup) {
+            std::cout << "[" << it.first << "]" << " ---- " << std::endl;
+            for (auto iv : (it.second)) {
+                std::cout << iv.first << "," << iv.second << std::endl;
+            }
+        }
+
+        std::cout << "*********************************" << std::endl;
+
+    }
 };
 
 #endif

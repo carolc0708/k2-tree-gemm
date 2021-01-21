@@ -7,10 +7,9 @@
     * **hybrid-k mode**: enter 0 for the `k` value, the `BLOCK_SIZE` should be set as the square of the smallest prime factor of matrix length 
 
 #### GEMM
-* spmm: sparse matrix (k2-tree) * dense matrix (2d vector) = dense matrix (2d vector)
 * spmv: sparse matrix (k2-tree) * dense vector (1d vector) = dense vector (1d vector)
 * spgemm: sparse matrix (k2-tree) * sparse matrix (k2-tree) = sparse matrix (k2-tree)
-* Note: `spmm()` and `spgemm()` are still under revision
+* Note: `spgemm()` result hasn't been verified
 
 #### Graph Algorithm
 * bfs: `g++ -o bfs bfs.cpp`, then `./bfs`

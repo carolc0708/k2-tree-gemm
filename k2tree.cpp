@@ -16,38 +16,23 @@ int main() {
         }
     }
 
-//    // multiply with dense matrix ---
-//    // an example dense matrix (assume matrix only contains 0 and 1)
-//    std::vector<std::vector<int>> dm;
-    int rows = tree->mat_height, cols = tree->mat_width;
-//	for(int i = 0; i < rows; i++){
-//		std::vector<int> temp;
-//		for(int j = 0; j < cols; j++){
-//			temp.push_back(1);//(i * cols + j + 1);
-//		}
-//		dm.push_back(temp);
-//	}
-//
-//    tree->spmm(dm);
-
     // multiply with dense vector ---
     // an example dense vector (assume vector only contains 0 and 1)
+    int rows = tree->mat_height, cols = tree->mat_width;
     std::vector<int> dv;
 	for(int i = 0; i < rows; i++){
 	    if (i < 85) dv.push_back(1);
 	    else dv.push_back(0);
 	}
-    std::cout << "dv_len: " << rows << std::endl;
-    tree->spmv(dv);
 
-//    // multiply with sparse matrix ---
-//    k2tree *tree2 = new k2tree(filename, 2);
-//
-//    tree->spgemm(tree2);
+    // multiply with sparse matrix ---
+    k2tree *tree2 = new k2tree(filename, 2);
+
+    tree->spgemm(tree2);
 
     // release
     delete tree;
-//    delete tree2;
+    delete tree2;
 
     return 0;
 }

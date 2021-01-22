@@ -35,7 +35,7 @@ int main() {
 
     // release
     delete tree;
-    delete tree2;
+    //delete tree2;
 
     return 0;
 }

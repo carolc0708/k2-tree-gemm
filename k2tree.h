@@ -57,10 +57,11 @@ public:
     // ************* constructor and destructor *************
     k2tree(const char* filename, int k) {
         if (filename == "") {
-                T_string = "";
-                std::cout << "Construct an empty tree. " << std::endl;
-            } else {
+            T_string = "";
+            std::cout << "Construct an empty tree. " << std::endl;
+        } else {
             buildK2Tree(filename, k);
+            //buildTreeBottomUp(filename, k); // TODO: fix the entry
         }
 
     }
@@ -271,6 +272,199 @@ public:
         else return result + " " + result_tmp;
     }
 
+ /**
+ * Build tree bottom-up
+ *
+ * @param filename  The filename (.mtx extension) of the ultra-sparse matrix
+ * @param k  For fixed-k mode, the specified k value; For hybrid-k mode, remains 0
+ * @return   1 or -1 to indicate successfully read in the matrix or not
+ */
+    int buildTreeBottomUp (const char *filename, int k) {
+        // load matrix -----------------------
+        int m_tmp, n_tmp, nnz_tmp;
+
+        int ret_code;
+        MM_typecode matcode;
+        FILE *f;
+
+        int nnz_mtx_report;
+        int isInteger = 0, isReal = 0, isPattern = 0, isSymmetric_tmp = 0, isComplex = 0;
+
+        if ((f = fopen(filename, "r")) == NULL)
+        {
+            printf("Error loading matrix file.\n");
+            return -1;
+        }
+
+        if (mm_read_banner(f, &matcode) != 0)
+        {
+            printf("Could not process Matrix Market banner.\n");
+            return -2;
+        }
+
+        if ( mm_is_pattern( matcode ) )  { isPattern = 1; /*printf("type = Pattern\n");*/ }
+        if ( mm_is_real ( matcode) )     { isReal = 1; /*printf("type = real\n");*/ }
+        if ( mm_is_complex( matcode ) )  { isComplex = 1; /*printf("type = real\n");*/ }
+        if ( mm_is_integer ( matcode ) ) { isInteger = 1; /*printf("type = integer\n");*/ }
+
+        /* find out size of sparse matrix .... */
+        ret_code = mm_read_mtx_crd_size(f, &m_tmp, &n_tmp, &nnz_mtx_report);
+        if (ret_code != 0)
+            return -4;
+
+
+        if ( mm_is_symmetric( matcode ) || mm_is_hermitian( matcode ) )
+        {
+            isSymmetric_tmp = 1;
+            //printf("input matrix is symmetric = true\n");
+        }
+        else
+        {
+            //printf("input matrix is symmetric = false\n");
+        }
+
+        this->csrRowIdx_tmp = (int *)malloc(nnz_mtx_report * sizeof(int));
+        this->csrColIdx_tmp = (int *)malloc(nnz_mtx_report * sizeof(int));
+
+        // k2-tree metadata -----------------------
+        this->mat_height = m_tmp;
+        this->mat_width = n_tmp;
+        this->mat_nnz = nnz_mtx_report;
+
+
+        // choice of k-split
+        if (k > 0) { // fixed-k, get padding
+            this->k = k;
+            this->getPadding();
+        } else { // hybrid-k, get prime factors for a sequence of k
+            this->getPrimeFactor(this->mat_height);
+            this->k = this->prime[(this->prime).size()-1];
+        }
+        int block_len = sqrt(BLOCK_SIZE);
+
+        // process building upon reading data
+        for (int i=0; i<nnz_mtx_report; i++) {
+            int idxi, idxj;
+            double fval, fval_im;
+            int ival;
+            int returnvalue;
+
+            if (isReal)
+            {
+                returnvalue = fscanf(f, "%d %d %lg\n", &idxi, &idxj, &fval);
+            }
+            else if (isComplex)
+            {
+                returnvalue = fscanf(f, "%d %d %lg %lg\n", &idxi, &idxj, &fval, &fval_im);
+            }
+            else if (isInteger)
+            {
+                returnvalue = fscanf(f, "%d %d %d\n", &idxi, &idxj, &ival);
+                fval = ival;
+            }
+            else if (isPattern)
+            {
+                returnvalue = fscanf(f, "%d %d\n", &idxi, &idxj);
+                fval = 1.0;
+            }
+
+            // adjust from 1-based to 0-based
+            idxi--;
+            idxj--;
+
+            // store to temporary location
+            this->csrRowIdx_tmp[i] = idxi;
+            this->csrColIdx_tmp[i] = idxj;
+
+
+            // build tree
+            int r = this->csrRowIdx_tmp[i]/block_len;
+            int c = this->csrColIdx_tmp[i]/block_len;
+
+            std::string r_ind = genRangeCode(r*block_len, r*block_len+block_len);
+            std::string c_ind = genRangeCode(c*block_len, c*block_len+block_len);
+
+            int bi_ind = (this->csrRowIdx_tmp[i] - r*block_len)%block_len;
+            int bj_ind = (this->csrColIdx_tmp[i] - c*block_len)%block_len;
+
+            this->leafgroup[r_ind][c_ind][BLOCK_SIZE-1-(bi_ind*block_len+bj_ind)] = 1;
+        }
+
+        std::cout << "Finished building tree's leaf group!" << std::endl;
+
+//        // printout leaf group
+//        for (auto it : this->leafgroup) {
+//            std::cout << "[" << it.first << "]" << " ---- " << std::endl;
+//            for (auto iv : (it.second)) {
+//                std::cout << iv.first << "," << iv.second << std::endl;
+//            }
+//        }
+
+        // sweep through the representation of each block by matrix index order
+        std::string all = "";
+        for (int r=0; r<this->mat_height; r+=block_len) {
+            std::string r_ind = genRangeCode(r, r+block_len);
+            for (int c=0; c<this->mat_height; c+=block_len) {
+                std::string c_ind = genRangeCode(c, c+block_len);
+                //std::cout << r_ind << " " << c_ind << std::endl;
+                if (leafBlockExist(r_ind, c_ind)) all += "1";
+                else all += "0";
+            }
+        }
+        //std::cout << all << std::endl;
+
+        // change the matrix index order to leaf representation
+        std::string L = "";
+        if (all.length() == BLOCK_SIZE) L = all; // only 2-level (e.g. the test4.mtx case)
+        else { // > 2-level
+            int outerrow = this->mat_height/(block_len*block_len*block_len) > 1 ? this->mat_height/(block_len*block_len*block_len) : 1;
+            for(int r=0; r<outerrow; r++) {
+                for (int c=0; c<this->mat_height/(block_len*block_len); c+=block_len) {
+                    // the start of the block
+                    int start = c + this->mat_height/block_len * r;
+                    for(int i=0; i<block_len; i++) {
+                        for(int j=0; j<block_len; j++) {
+                            //std::cout << start +i * this->mat_height/(block_len*block_len) + j << " ";
+                            L += all[start +i * this->mat_height/(block_len*block_len) + j];
+                        }
+                    }
+                }
+
+            }
+
+            // start from the second level (parents of the leafs)
+            // for every block_len sub-string of previous level, they form a group
+            std::string old_T = L;
+            std::string new_T = "";
+            std::string temp = "";
+
+            while (old_T.length() != 1) {
+                for (int i=0; i<old_T.length(); i+=BLOCK_SIZE) {
+                    //std::cout <<  old_T.substr(i, BLOCK_SIZE) << " ";
+                    if (old_T.substr(i, BLOCK_SIZE) == "0000") new_T += "0";
+                    else {new_T += "1"; temp += old_T.substr(i, BLOCK_SIZE);}
+                }
+                old_T = new_T;
+                new_T = "";
+                this->T_string = temp + this->T_string;
+                temp= "";
+            }
+
+            std::cout << "construction result: " << std::endl;
+            std::cout << "T_string: "<< this->T_string << std::endl;
+            std::cout << "L_string: " << L << std::endl; // TODO: the current L_string is not leaf block content, just to assist the new level T
+
+        } // > 2-level
+
+
+        // free tmp space
+        free(this->csrRowIdx_tmp);
+        free(this->csrColIdx_tmp);
+
+        return 0;
+
+    }
+
     // ************* multiplication functions *************
     std::vector<int> spmv(std::vector<int> dv) {
         // init output vector
@@ -315,7 +509,7 @@ public:
 
         // initialize a new tree
         int block_len = sqrt(BLOCK_SIZE);
-        k2tree *output = new k2tree("", block_len); // construct a empty structure
+        k2tree *output = new k2tree("", block_len); // TODO: construct a empty structure, should add bottom-up construct
         output->mat_height = this->mat_height;
 
         // multiplication

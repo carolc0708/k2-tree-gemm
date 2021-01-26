@@ -1,4 +1,5 @@
 # k2-tree-gemm
+## CPU ver.
 #### Tree Representation 
 * To compile the program: `g++ -o k2tree k2tree.cpp`
 * Execute: `./k2tree`
@@ -14,3 +15,7 @@
 
 #### Graph Algorithm
 * bfs: `g++ -o bfs bfs.cpp`, then `./bfs`
+
+## GPU ver.
+* To compile the program in `k2tree-gpu`: `nvcc -std=c++11 -O3 -w -arch=sm_60 -maxrregcount=64 -rdc=true -o k2tree k2tree.cu`
+* Note: the result hasn't been fully verified

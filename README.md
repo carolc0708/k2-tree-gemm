@@ -18,4 +18,4 @@
 
 ## GPU ver.
 * To compile the program in `k2tree-gpu`: `nvcc -std=c++11 -O3 -w -arch=sm_60 -maxrregcount=64 -rdc=true -o k2tree k2tree.cu`
-* Note: the result hasn't been fully verified
+* Note: it is verified on only CUDA 10.0

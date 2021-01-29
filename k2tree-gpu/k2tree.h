@@ -70,14 +70,18 @@ __global__ void UnpackFcOutput32(const unsigned* __restrict__  A, float* B,
 class MulAParam // a k2-tree matrix-mutiplication unit
 {
 public:
+    // length
+    unsigned input_height;
+    unsigned input_width;
+    unsigned weight_width;
+
     // Input
     float* input;
     unsigned* input_gpu;
-    unsigned mat_length;
 
     // A (treat like weight)
-    float* A;
-    unsigned* A_gpu;
+    float* weight;
+    unsigned* weight_gpu;
 
     // Output
     unsigned* output;
@@ -86,24 +90,24 @@ public:
     // GPU shadow
     MulAParam* gpu;
 
-    // metadata
-    unsigned k;
-
 public:
-    MulAParam(unsigned mat_length)
+    MulAParam(unsigned _input_height, unsigned _input_width, unsigned _weight_width)
     {
+        this->input_height = _input_height;
+        this->input_width = _input_width;
+        this->weight_width = _weight_width;
+
         this->input = NULL;
         this->input_gpu = NULL;
-        this->mat_length = mat_length;
 
-        this->A = NULL;
-        this->A_gpu = NULL;
+        this->weight = NULL;
+        this->weight_gpu = NULL;
 
         this->output = NULL;
         this->output_gpu = NULL;
 
         this->gpu = NULL;
-        //this->k = k; // is already something fixed
+
     }
 
     MulAParam* ready()
@@ -133,8 +137,9 @@ public:
         CUDA_SAFE_CALL( cudaMemcpy(input_float, this->input, input_bytes(), cudaMemcpyHostToDevice) );
 
         // Binarize and compact prev_iter
-        PackTo32Col<<<dim3(CEIL(this->mat_length), CEIL(this->mat_length)), 32>>>(
-                    input_float, this->input_gpu, this->mat_length, this->mat_length);
+        // v: height = 1, weight = mat_length
+        PackTo32Col<<<dim3(CEIL(this->input_height), CEIL(this->input_width)), 32>>>(
+                    input_float, this->input_gpu, this->input_height, this->input_width);
         CUDA_SAFE_CALL(cudaFree(input_float));
 
         // download to verify --
@@ -142,6 +147,7 @@ public:
         CUDA_SAFE_CALL( cudaMallocHost((void**)&(input_verify), input_bit_bytes()) );
         CUDA_SAFE_CALL( cudaMemcpy(input_verify, this->input_gpu, input_bit_bytes(), cudaMemcpyDeviceToHost) );
         printf("\n input verify: \n");
+        printf("%d\n", input_bit_size());
         for(int i=0; i<input_bit_size(); i++) {
             printf("D%d:", i); bin(input_verify[i]); printf("\n");
         }
@@ -155,43 +161,43 @@ public:
         cudaFreeHost(input_verify);
 
         // process A =====
-        this->A = (float*) malloc(A_bytes());
-        launch_array(config_file, this->A, A_size());
-        CUDA_SAFE_CALL(cudaMalloc((void**)&(this->A_gpu), A_bit_bytes()));
+        this->weight = (float*) malloc(weight_bytes());
+        launch_array(config_file, this->weight, weight_size());
+        CUDA_SAFE_CALL(cudaMalloc((void**)&(this->weight_gpu), weight_bit_bytes()));
         printf(" \n A: \n");
-        for(int i=0; i<this->mat_length; i++) {
-            for (int j=0; j<this->mat_length; j++) {
-                printf("%d", (this->A[i * mat_length + j])>0?1:0);
+        for(int i=0; i<this->input_width; i++) {
+            for (int j=0; j<this->weight_width; j++) {
+                printf("%d", (this->weight[i * this->input_width + j])>0?1:0);
             }
             printf("\n");
         }
         printf("\n");
 
-        float* A_float = NULL;
-        CUDA_SAFE_CALL( cudaMalloc((void**)&(A_float), A_bytes()) );
-        CUDA_SAFE_CALL( cudaMemcpy(A_float, this->A, A_bytes(), cudaMemcpyHostToDevice) );
+        float* weight_float = NULL;
+        CUDA_SAFE_CALL( cudaMalloc((void**)&(weight_float), weight_bytes()) );
+        CUDA_SAFE_CALL( cudaMemcpy(weight_float, this->weight, weight_bytes(), cudaMemcpyHostToDevice) );
 
         // Binarize and compact A
-        PackTo32Row<<<dim3( CEIL(this->mat_length), CEIL(this->mat_length) ), 32>>>(
-                                    A_float, this->A_gpu, this->mat_length, this->mat_length);
-        CUDA_SAFE_CALL( cudaFree(A_float) );
+        PackTo32Row<<<dim3( CEIL(this->input_width), CEIL(this->weight_width) ), 32>>>(
+                                    weight_float, this->weight_gpu, this->input_width, this->weight_width);
+        CUDA_SAFE_CALL( cudaFree(weight_float) );
 
         // download to verify --
-        unsigned* A_verify = NULL;
-        CUDA_SAFE_CALL( cudaMallocHost((void**)&(A_verify), A_bit_bytes()) );
-        CUDA_SAFE_CALL( cudaMemcpy(A_verify, this->A_gpu, A_bit_bytes(), cudaMemcpyDeviceToHost) );
+        unsigned* weight_verify = NULL;
+        CUDA_SAFE_CALL( cudaMallocHost((void**)&(weight_verify), weight_bit_bytes()) );
+        CUDA_SAFE_CALL( cudaMemcpy(weight_verify, this->weight_gpu, weight_bit_bytes(), cudaMemcpyDeviceToHost) );
 
         printf(" \n A_verify: \n");
-        for(int i=0; i<A_bit_size(); i++) {
-            printf("D%d:", i); bin(A_verify[i]); printf("\n");
+        for(int i=0; i<weight_bit_size(); i++) {
+            printf("D%d:", i); bin(weight_verify[i]); printf("\n");
         }
         printf("\n"); // here, we printed this way
         // [0...32] -> unsigned D0
         // [0...32] -> D1
         // ...
         // [0...32] -> D31
-        CUDA_SAFE_CALL( cudaMemcpy(this->A_gpu, A_verify, A_bit_bytes(), cudaMemcpyHostToDevice) );
-        cudaFreeHost(A_verify);
+        CUDA_SAFE_CALL( cudaMemcpy(this->weight_gpu, weight_verify, weight_bit_bytes(), cudaMemcpyHostToDevice) );
+        cudaFreeHost(weight_verify);
 
         // allocate output
         CUDA_SAFE_CALL(cudaMalloc((void**)&(this->output_gpu), output_bit_bytes()));
@@ -203,21 +209,21 @@ public:
 
     // sizes
     //column-major, ceil row
-    int input_size() { return this->mat_length * this->mat_length; }
+    int input_size() { return this->input_height * this->input_width; }
     int input_bytes() { return this->input_size() * sizeof(unsigned); }
-    int input_bit_size() { return FEIL(this->mat_length) * CEIL(this->mat_length); }
+    int input_bit_size() { return FEIL(this->input_height) * CEIL(this->input_width); }
     int input_bit_bytes() { return this->input_bit_size() * sizeof(unsigned); }
 
     //row-major, ceil column to 32bit
-    int A_size() { return this->mat_length * this->mat_length; }
-    int A_bytes() { return this->A_size()*sizeof(unsigned); }
-    int A_bit_size() { return CEIL(this->mat_length) * FEIL(this->mat_length); }
-    int A_bit_bytes() { return this->A_bit_size()*sizeof(unsigned); }
+    int weight_size() { return this->input_width * this->weight_width; }
+    int weight_bytes() { return this->weight_size()*sizeof(unsigned); }
+    int weight_bit_size() { return CEIL(this->input_width) * FEIL(this->weight_width); }
+    int weight_bit_bytes() { return this->weight_bit_size()*sizeof(unsigned); }
 
     //column-major, ceil row to 32bit
-    int output_size() { return this->mat_length * this->mat_length; }
+    int output_size() { return this->input_height * this->weight_width; }
     int output_bytes() { return this->output_size() * sizeof(unsigned); }
-    int output_bit_size() { return FEIL(this->mat_length) * CEIL(this->mat_length); }
+    int output_bit_size() { return FEIL(this->input_height) * CEIL(this->weight_width); }
     int output_bit_bytes() { return this->output_bit_size() * sizeof(unsigned); }
 
     // output
@@ -235,8 +241,8 @@ public:
         float* full_output_gpu = NULL;
         CUDA_SAFE_CALL( cudaMalloc((void**)&(full_output_gpu), size) );
         CUDA_SAFE_CALL( cudaMemset(full_output_gpu, 0, size) );
-        UnpackFcOutput32<<<dim3( CEIL(this->mat_length), CEIL(this->mat_length) ), 32>>>(
-                this->output_gpu, full_output_gpu, this->mat_length, this->mat_length);
+        UnpackFcOutput32<<<dim3( CEIL(this->input_height), CEIL(this->weight_width) ), 32>>>(
+                this->output_gpu, full_output_gpu, this->input_height, this->weight_width);
         CUDA_SAFE_CALL( cudaMemcpy(full_output, full_output_gpu, size, cudaMemcpyDeviceToHost) );
         CUDA_SAFE_CALL( cudaFree(full_output_gpu) );
         return full_output;

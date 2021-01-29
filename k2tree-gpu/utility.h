@@ -39,11 +39,11 @@ void launch_array(FILE* cf, float* array, unsigned array_size)
 }
 
 // validate output
-void validate(float* output, unsigned mat_length) {
-    for (int i=0; i<mat_length; i++) {
-        for (int j=0; j<mat_length; j++) {
+void validate(float* output, unsigned output_height, unsigned output_width) {
+    for (int i=0; i<output_height; i++) {
+        for (int j=0; j<output_width; j++) {
             //printf("%.f ", (output[i * mat_length + j]));
-            printf("%d", (output[i * mat_length + j])>0?1:0);
+            printf("%d", (output[i * output_height + j])>0?1:0);
         }
         printf("\n");
     }
